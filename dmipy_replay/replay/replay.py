@@ -49,15 +49,15 @@ from ..acquisition.scanner_sequence import Protocol, ScannerSequence
 
 __all__ = ["ReplayPack", "read_rpk", "compile_scheme", "replay_signal", "replay_coefficients", "surface_logweight"]
 
-def read_rpk(path):
+def read_rpk(path, *, cls=None):
     """Read a replay pack into a :class:`ReplayPack` (arrays + metadata). A pack that embeds no substrate spec, or
     whose spec's pools, tiers and stored field channel disagree (:func:`declared_susceptibility_field`), is
-    refused."""
+    refused. ``cls`` is the class built, a subclass of :class:`ReplayPack` (the producer's, which adds its routes)."""
     from .container import read_safetensors
     arrays, hdr = read_safetensors(path)
     meta = json.loads(hdr.get("rpk") or hdr.get("json") or "{}")
     _refuse_predating(meta, path, tensors=arrays)
-    pack = ReplayPack(arrays, meta, source=str(path))
+    pack = (cls or ReplayPack)(arrays, meta, source=str(path))
     pack.susceptibility_field
     return pack
 
@@ -210,6 +210,12 @@ def field_term(declared, tissue, scanner):
         return FieldTerm(axis=f.axis)
     return FieldTerm(B0=float(f.B0), axis=f.axis, chi_iso=given.get("chi_iso", 0.0), chi_aniso=given.get("chi_aniso", 0.0))
 
+def _numpy_bloch():
+    """The numpy vector-Bloch propagator, the reference (:func:`~dmipy_replay.replay.bloch.replay_bloch`)."""
+    from .bloch import replay_bloch
+    return replay_bloch
+
+
 def _pose_matrix(pose):
     """A specimen pose as a 3x3 rotation, from a matrix or an object with ``.rotation``; ``None`` stays ``None``."""
     if pose is None:
@@ -221,6 +227,14 @@ class ReplayPack:
     """A replay pack: the channel ``arrays`` plus ``meta``, with ``load`` / ``save`` and the one
     consume path, :meth:`replay`. Accessors mirror the walk parameters (``n_t``, ``dt``, ``K``,
     ``n_walkers``) and the tiers carried (``has_relaxation``, ``has_surface``, ``has_field``)."""
+
+    #: the vector-Bloch propagators by name: a factory returning the function (``bloch.replay_bloch``'s arguments)
+    BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch()}
+
+    @staticmethod
+    def _as_distribution(orientation):
+        """``orientation=`` as a distribution of poses, or None when it names a single pose."""
+        return _as_distribution(orientation)
 
     def __init__(self, arrays, meta, source=None):
         self.arrays = dict(arrays)
@@ -242,10 +256,10 @@ class ReplayPack:
             if not is_hub_uri(path):
                 raise ValueError(f"windows= reads a pack's leading windows from the hub by byte range; "
                                  f"{path!r} is not an hf:// URI")
-            return read_rpk(fetch_windows(path, windows, **kw))
+            return read_rpk(fetch_windows(path, windows, **kw), cls=cls)
         if kw:
             raise TypeError(f"load() takes {sorted(kw)} only together with windows=")
-        return read_rpk(fetch(path) if is_hub_uri(path) else path)
+        return read_rpk(fetch(path) if is_hub_uri(path) else path, cls=cls)
 
     @property
     def windows(self):
@@ -309,7 +323,7 @@ class ReplayPack:
         per = fid.pop("windows", None)
         meta["fidelity"] = dict(per[i]) if per else fid
         meta.setdefault("provenance", {})["window"] = dict(index=i, of=n, parent_id=self.meta.get("id"))
-        return ReplayPack(self._window_arrays(i), meta, source=self.source)
+        return type(self)(self._window_arrays(i), meta, source=self.source)
 
     def _windows(self):
         """``[(pack, t0, T), ...]``: the windows of the walk this pack actually holds, each as a pack, the instant it
@@ -536,7 +550,7 @@ class ReplayPack:
         for k in list(arrays):
             if k.split("/")[-1].endswith("_events_t"):
                 arrays[k] = np.asarray(arrays[k], np.float64) / a
-        out = ReplayPack(arrays, meta, source=self.source)
+        out = type(self)(arrays, meta, source=self.source)
         return out
 
     def at_length_scale(self, s):
@@ -621,7 +635,7 @@ class ReplayPack:
             diffusivity=dict(walked=before.get("diffusivity", {}).get("walked", D0), replayed=wp.get("diffusivity")),
             b_max=dict(walked=before.get("b_max", {}).get("walked", b_max), served=acq.get("b_max")),
             certificate="measured at the walked lengths; the view at b is the walk at s^2 b, served up to b_max / s^2")
-        return ReplayPack(arrays, meta, source=self.source)
+        return type(self)(arrays, meta, source=self.source)
 
     def _check_length_scale(self, waveform):
         """Refuse a waveform beyond the envelope a length-scaled view serves (:meth:`at_length_scale`): the view at
@@ -761,7 +775,7 @@ class ReplayPack:
         if view is not self:
             return view.replay(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
                                compartment=compartment, complex_signal=complex_signal)
-        dist = _as_distribution(orientation)
+        dist = self._as_distribution(orientation)
         if dist is not None:
             S = self.pose_response(waveform, tissue=tissue, scanner=scanner, compartment=compartment).compose(dist)
             return S if complex_signal else np.abs(S)
@@ -890,9 +904,9 @@ class ReplayPack:
 
     def replay_bloch(self, waveform, *, b1_scale=None, off_resonance_T=None, tissue=None, scanner=None,
                      orientation=None, compartment=None, complex_signal=False, per_walker=False,
-                     crusher_seed=0):
+                     crusher_seed=0, backend="numpy"):
         """The RF-aware replay: each walker's magnetisation vector propagated through the actual sequence
-        operators on this pack's walk (:func:`~dmipy_replay.replay.trajectories.replay_bloch`).
+        operators on this pack's walk (:func:`~dmipy_replay.replay.bloch.replay_bloch`).
 
         This route reads the waveform's PHYSICAL ``G`` and applies its pulses; :meth:`replay` reads ``G_eff``
         with the pulses folded in. The magnitude route of :meth:`replay` assumes ideal pulses and reads the
@@ -918,11 +932,17 @@ class ReplayPack:
         of a pulse train stays degenerate and recombines, and the echo barely depends on the refocusing flip
         angle, which is not what a train does. ``crusher_seed`` draws those coordinates, so a replay of one
         pack and one sequence is reproducible.
+
+        ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS` (``"numpy"`` here, the reference; a
+        producer's subclass adds its device ones), all taking the same arguments.
         """
         view = self._at_tissue(tissue)
         if view is not self:
-            return view.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, complex_signal=complex_signal, per_walker=per_walker, crusher_seed=crusher_seed)
-        from .bloch import replay_bloch as _rb, _bloch_timeline
+            return view.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, complex_signal=complex_signal, per_walker=per_walker, crusher_seed=crusher_seed, backend=backend)
+        if backend not in self.BLOCH_BACKENDS:
+            raise ValueError(f"backend={backend!r}: this pack's propagators are {sorted(self.BLOCH_BACKENDS)}")
+        _rb = self.BLOCH_BACKENDS[backend]()
+        from .bloch import _bloch_timeline
         from .compression import occupancy_at, local_time_at, positions_at
         from ._replay_kernel import gate_weights
         P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,

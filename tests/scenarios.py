@@ -111,8 +111,8 @@ def gre_field_7T_aniso(ns, p):
 
 
 def se_field(ns, p):
-    d, bv = _shells(b=np.array([0.0, 1e9]))
-    seq = ns.pgse(d, 0.0015, 0.004, bvalues=bv)
+    d, bv = _shells(b=np.array([0.0, 1e8]))
+    seq = ns.pgse(d, 0.0015, 0.004, bvalues=bv, slew_rate=np.inf)
     return p.replay(seq, tissue=_tissue(ns, chi_iso=-1e-7), scanner=7.0, complex_signal=True)
 
 

@@ -1,0 +1,33 @@
+{
+ "dmipy_sim_commit": "194dad674bcbed0343808daf991254617608e508",
+ "scenarios": [
+  "bare",
+  "square_lobes",
+  "relaxed",
+  "surface",
+  "surface_longitudinal",
+  "stimulated",
+  "oscillating",
+  "posed",
+  "posed_matrix",
+  "one_pool",
+  "per_walker",
+  "faster",
+  "smaller",
+  "bloch_nominal",
+  "bloch_b1",
+  "bloch_train",
+  "bloch_offresonance",
+  "exchange_relaxed",
+  "exchange_stimulated",
+  "long_te",
+  "long_te_relaxed",
+  "long_te_bloch",
+  "gre_field_3T",
+  "gre_field_7T_aniso",
+  "se_field",
+  "field_posed",
+  "bloch_field"
+ ],
+ "failed": {}
+}
