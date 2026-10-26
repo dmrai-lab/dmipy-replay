@@ -1,0 +1,64 @@
+{
+ "export_pgse": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "refocus"
+  ],
+  "flips_sim": [
+   90.0,
+   180.0
+  ]
+ },
+ "export_pgste": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "store",
+   "recall"
+  ],
+  "flips_sim": [
+   90.0,
+   90.0,
+   90.0
+  ]
+ },
+ "export_ogse": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "refocus"
+  ],
+  "flips_sim": [
+   90.0,
+   180.0
+  ]
+ },
+ "foreign_sinc_se": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "refocus"
+  ],
+  "flips_sim": [
+   90.0,
+   180.0
+  ]
+ },
+ "foreign_block_se_150": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "refocus"
+  ],
+  "flips_sim": [
+   90.0,
+   180.0
+  ]
+ },
+ "foreign_arbitrary": {
+  "labels": [
+   "Mz\u2192Mxy",
+   "refocus"
+  ],
+  "flips_sim": [
+   90.0,
+   180.0
+  ]
+ }
+}

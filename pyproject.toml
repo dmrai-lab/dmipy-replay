@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dmipy-replay"
+version = "0.1.0"
+description = "Replay Monte-Carlo diffusion-MRI walks from the Hub with any acquisition: numpy only, no walk, no GPU"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [{ name = "Rutger Fick", email = "fick.rutger@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["dmipy_replay*"]
+
+[tool.setuptools.package-data]
+"dmipy_replay.acquisition" = ["*.json"]
+"dmipy_replay.spec" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

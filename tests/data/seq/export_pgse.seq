@@ -1,0 +1,136 @@
+# Pulseq sequence file
+# Created by PyPulseq
+
+[VERSION]
+major 1
+minor 5
+revision 0
+
+[DEFINITIONS]
+AdcRasterTime 1e-07 
+BlockDurationRaster 6.70021659e-05 
+GradientRasterTime 6.70021659e-05 
+RadiofrequencyRasterTime 6.70021659e-05 
+TotalDuration 0.0270018728 
+dmipy_dt 6.70021659e-05 
+dmipy_echo_idx 400 
+dmipy_gradient physical 
+dmipy_n_t 401 
+dmipy_rf_events [{"t_s":0.0,"flip_deg":90.0,"label":"Mz\u2192Mxy"},{"t_s":0.01336693209188224,"flip_deg":180.0,"label":"refocus"}] 
+
+# Format of blocks:
+# NUM DUR RF  GX  GY  GZ  ADC  EXT
+[BLOCKS]
+1   1   1   0   0   0  0  0
+2 201   0   1   0   0  0  0
+3   1   2   0   0   0  0  0
+4 199   0   2   0   0  0  0
+5   1   0   0   0   0  1  0
+
+# Format of RF events:
+# id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
+# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..
+# Field "use" is the initial of: excitation refocusing inversion saturation preparation other undefined
+[RF]
+1      3731.22 1 2 0 33.5011 0 0 0 0 0 e
+2      7462.45 1 2 0 33.5011 0 0 0 0 0 r
+
+# Format of arbitrary gradients:
+#   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)
+# id amplitude first last amp_shape_id time_shape_id delay
+# ..      Hz/m  Hz/m Hz/m        ..         ..          us
+[GRADIENTS]
+1    6.249e+06      -142634            0 3 0 0
+2    6.249e+06            0      -285892 4 0 0
+
+# Format of ADC events:
+# id num dwell delay freqPPM phasePPM freq phase phase_id
+# ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
+[ADC]
+1 1 67002 0 0 0 0 0 0
+
+# Sequence Shapes
+[SHAPES]
+
+shape_id 1
+num_samples 2
+1
+1
+
+shape_id 2
+num_samples 2
+0
+0
+
+shape_id 3
+num_samples 201
+0
+0.0456503
+0.0913005
+0.0913004
+0.0913006
+0.0913005
+0.0913004
+0.0913006
+0.0913005
+0.0913004
+0.0913006
+0.0913004
+0.0413448
+0
+0
+76
+-0.0867953
+-0.0913005
+-0.0913006
+-0.0913004
+-0.0913005
+-0.0913006
+-0.0913005
+-0.0913004
+-0.0913006
+-0.0913005
+-0.0915001
+0
+0
+97
+
+shape_id 4
+num_samples 199
+0
+0
+96
+0.0456503
+0.0913005
+0.0913004
+0.0913006
+0.0913005
+0.0913004
+0.0913006
+0.0913005
+0.0913004
+0.0913006
+0.0913004
+0.0413448
+0
+0
+76
+-0.0867953
+-0.0913005
+-0.0913006
+-0.0913004
+-0.0913005
+-0.0913006
+-0.0913005
+-0.0913004
+-0.0913006
+-0.0913005
+-0.0915001
+
+
+[SIGNATURE]
+# This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
+# It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
+# The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
+Type md5
+Hash 9bbc2c2e038723baea4ad0047c5b6ebe
