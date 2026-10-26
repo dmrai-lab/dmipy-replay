@@ -75,6 +75,14 @@ DELETE["dmipy_sim.replay.publish"] |= {"_ST_DTYPES", "_auth_headers", "_range_ge
 DELETE["dmipy_sim.sequences.pulseq"] |= {"_rf_from_pulseq", "_event_times", "_gradient_live_spans", "_has_adc",
                                          "_decode_rf_events"}
 
+#: a package that star-re-exports a subset module re-exported its moved names too (``from dmipy_sim.replay import
+#: compile_scheme``): that spelling is rewritten like the module's own; nothing is deleted from the package
+STAR_REEXPORTS = {"dmipy_sim.replay": "dmipy_sim.replay.replay"}
+for pkg, mod in STAR_REEXPORTS.items():
+    for (m, name), tgt in list(NAMES.items()):
+        if m == mod:
+            NAMES[(pkg, name)] = tgt
+
 
 def module_of(path):
     p = pathlib.Path(path).with_suffix("")
@@ -147,7 +155,17 @@ def rewrite_imports(path, text):
         edits.append((first, last, "\n".join(stmts) + "\n"))
     for first, last, new in sorted(edits, reverse=True):
         lines[first:last + 1] = [new]
-    return "".join(lines), len(edits)
+    text, n = "".join(lines), len(edits)
+    # a module named in a string (``__import__("dmipy_sim.spec.substrate")``, ``importlib.import_module``)
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.Constant) and node.value in MODULES:
+            lines = text.splitlines(keepends=True)
+            line = lines[node.lineno - 1]
+            seg = line[node.col_offset:node.end_col_offset]
+            lines[node.lineno - 1] = (line[:node.col_offset] + seg.replace(node.value, MODULES[node.value])
+                                      + line[node.end_col_offset:])
+            text, n = "".join(lines), n + 1
+    return text, n
 
 
 def delete_definitions(path, text, names):

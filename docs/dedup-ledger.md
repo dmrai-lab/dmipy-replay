@@ -72,8 +72,13 @@ delete and what to adapt.
    `.spec.substrate` re-export from `dmipy_replay` (one spelling: `dmipy_sim.pgse is dmipy_replay.pgse`).
 3. `dmipy_sim.replay.replay.ReplayPack` subclasses `dmipy_replay.ReplayPack` and keeps the producer and device
    routes: `open` (columnar), `save`, `publish`, `truncate`, `end_state`, `extend`, `rewindow`,
-   `restate_surface_envelope`, `prefix`, `pose_*`, `study`, `walker_primitives`, `replay_bloch(jax=)`.
+   `restate_surface_envelope`, `prefix`, `pose_*`, `study`, `walker_primitives`; `BLOCH_BACKENDS` adds
+   `"jax"` (`replay_bloch(backend="jax")`).
 4. `compression`, `bank`, `trajectories`, `fields.hollow_cylinder`, `engine.bloch`, `coefficient_walk` import the
    moved functions instead of defining them.
 5. `sequences/pulseq.py` keeps `to_pulseq` and imports `from_pulseq` / `pulseq_timing` from replay.
 6. The sim suite green with dmipy-replay installed from this repository; `tests/test_api_surface.py` re-pointed.
+
+Re-cut on a fresh sim `main`, from the sim checkout: `tools/dedup_sim.py --apply` (imports, module-name strings, the
+`dmipy_sim.replay` package's re-exports, deletions), `tools/dedup_attrs.py --apply`, `tools/dedup_fix_names.py` until
+it reports nothing, then `tools/dedup_check_names.py` (every sim-internal import resolves), pyflakes, the suite.
