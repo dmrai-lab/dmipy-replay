@@ -244,13 +244,13 @@ class ReplayPack:
     @classmethod
     def load(cls, path, *, windows=None, **kw):
         """Read a ``.rpk`` file: a local path, or ``hf://owner/name/path/to/file.rpk`` fetched from the hub into the
-        local cache and checked against the dataset's ``manifest.json`` (:func:`~dmipy_replay.replay.publish.fetch`).
+        local cache and checked against the dataset's ``manifest.json`` (:func:`~dmipy_replay.replay.hub.fetch`).
 
         ``windows`` reads only the pack's leading windows (RPK.md 4.3: a prefix ``range(k)`` of window indices)
-        from the hub, by HTTP byte range, through :func:`~dmipy_replay.replay.publish.fetch_windows` -- only ``hf://``
+        from the hub, by HTTP byte range, through :func:`~dmipy_replay.replay.hub.fetch_windows` -- only ``hf://``
         URIs take it, since a local file is already whole and cheap to read entire. The pack this returns carries
         :attr:`windows_present`; :meth:`_windows` serves only what it holds, and a replay that reaches further is
-        refused by name. Extra keywords (``url=``, ``revision=``) are :func:`~dmipy_replay.replay.publish.fetch_windows`'s."""
+        refused by name. Extra keywords (``url=``, ``revision=``) are :func:`~dmipy_replay.replay.hub.fetch_windows`'s."""
         from .hub import fetch, fetch_windows, is_hub_uri
         if windows is not None:
             if not is_hub_uri(path):

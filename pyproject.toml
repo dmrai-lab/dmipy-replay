@@ -22,6 +22,8 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# test oracle only: no shipped module imports it
+oracle = ["dipy>=1.9"]
 
 [tool.setuptools.packages.find]
 include = ["dmipy_replay*"]

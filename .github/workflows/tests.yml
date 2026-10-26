@@ -23,6 +23,6 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]" safetensors
+          pip install -e ".[dev,oracle]" safetensors
       - name: Test
         run: pytest -q

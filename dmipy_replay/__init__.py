@@ -20,6 +20,7 @@ from .acquisition.timing import SequenceTiming
 from .acquisition.scanners import ScannerLimits
 from .acquisition.waveforms import set_b, calc_b, calc_btensor, btensor_invariants, rotate_waveform, tile_waveform
 from .sequences.builders import pgse, pgste, ogse, cpmg, splice, gre, ste, pte
+from .sequences.btable import from_btable
 from .spec.tissue import Tissue
 from .spec.substrate import SubstrateSpec
 from .replay.replay import ReplayPack, read_rpk, compile_scheme
@@ -29,5 +30,5 @@ __version__ = "0.1.0"
 
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
-           "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "Tissue", "SubstrateSpec",
+           "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "hub"]
