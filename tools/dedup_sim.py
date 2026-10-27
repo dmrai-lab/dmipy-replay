@@ -23,7 +23,8 @@ MODULES.update({"dmipy_sim.constants": "dmipy_replay.constants",
                 "dmipy_sim.math.gradient_conversions": "dmipy_replay.math.gradient_conversions",
                 "dmipy_sim.spec.substrate": "dmipy_replay.spec.substrate",
                 "dmipy_sim.spec.tissue": "dmipy_replay.spec.tissue",
-                "dmipy_sim.replay._replay_kernel": "dmipy_replay.replay._replay_kernel"})
+                "dmipy_sim.replay._replay_kernel": "dmipy_replay.replay._replay_kernel",
+                "dmipy_sim.phantom.grid": "dmipy_replay.phantom.grid"})
 FILES = {"dmipy_sim/acquisition/scanner_constants.json", "dmipy_sim/acquisition/scanner_catalogue.schema.json",
          "dmipy_sim/spec/substrate.schema.json"}
 
@@ -61,6 +62,8 @@ for name in ("REFUSED_KEYS", "REFUSED_CHANNEL_KEYS", "REFUSED_COLUMN_KINDS", "RE
              "_compile_continuous", "_band_phase", "_path_field_channels", "_has_aniso", "_signal_factor",
              "_gated_contact", "surface_logweight", "replay_signal", "replay_coefficients"):
     NAMES[("dmipy_sim.replay.replay", name)] = "dmipy_replay.replay.replay"
+for name in ("STORAGE_BAND_MARGIN", "storage_band_hz", "mode_count"):
+    NAMES[("dmipy_sim.replay.bank", name)] = "dmipy_replay.replay.storage"
 for name in ("is_hub_uri", "parse_uri", "fetch", "fetch_windows", "window_prefix", "_coalesce", "_window_tensor_names"):
     NAMES[("dmipy_sim.replay.publish", name)] = "dmipy_replay.replay.hub"
 for name in ("from_pulseq", "pulseq_timing"):

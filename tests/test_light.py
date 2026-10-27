@@ -1,5 +1,6 @@
 """The package is numpy and the standard library: importing it, reading a pack, replaying it, reading a ``.seq`` and
-building from a b-value table load nothing else."""
+building from a b-value table and imaging a columnar
+layout load nothing else."""
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ p.replay(dr.pgse([[1, 0, 0]], 0.006, 0.02, bvalues=[1e9]))
 p.replay_bloch(dr.pgse([[1, 0, 0]], 0.006, 0.02, bvalues=[1e9]), b1_scale=0.9)
 from_pulseq({str(ROOT / 'tests' / 'data' / 'seq' / 'foreign_sinc_se.seq')!r})
 from dmipy_replay import from_btable
+lay = dr.open_columnar({str(ROOT / 'tests' / 'data' / 'columnar_quant')!r})
+lay.image(dr.pgse([[1, 0, 0]], 0.6e-3, 1.8e-3, bvalues=[1e9], n_t=401, slew_rate=float("inf"), TE=4e-3))
 print(sorted({{m.split('.')[0] for m in sys.modules}} & set({HEAVY!r})))
 """
     out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, check=True).stdout

@@ -24,6 +24,8 @@ from .sequences.btable import from_btable
 from .spec.tissue import Tissue
 from .spec.substrate import SubstrateSpec
 from .replay.replay import ReplayPack, read_rpk, compile_scheme
+from .replay.columnar import ColumnarPack, open_columnar
+from .phantom.grid import Grid
 from .replay import hub
 
 __version__ = "0.1.0"
@@ -31,4 +33,4 @@ __version__ = "0.1.0"
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
-           "ReplayPack", "read_rpk", "compile_scheme", "hub"]
+           "ReplayPack", "read_rpk", "compile_scheme", "ColumnarPack", "open_columnar", "Grid", "hub"]

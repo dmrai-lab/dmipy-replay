@@ -15,6 +15,7 @@ delete and what to adapt.
 | `math/gradient_conversions.py` | `math/` |
 | `spec/{substrate, tissue}.py`, `substrate.schema.json` | `spec/` |
 | `replay/_replay_kernel.py` | `replay/_replay_kernel.py` |
+| `phantom/grid.py` | `phantom/grid.py` |
 
 ## Moved as a subset (source text of each function exact)
 
@@ -28,6 +29,8 @@ delete and what to adapt.
 | `engine/bloch.py` | `replay/bloch.py` | `_build_crusher` |
 | `coefficient_walk.py` | `replay/events.py` | `EventList`, `events_label_at`, `events_at_instants`, `events_within` |
 | `replay/so3.py` | `replay/so3.py` | `rotation_of` |
+| `replay/bank.py` | `replay/storage.py` | `STORAGE_BAND_MARGIN`, `storage_band_hz`, `mode_count` (the producer and the reader read one storage rule) |
+| `replay/columnar.py` | `replay/columnar.py` | `ColumnarPack` without `image_study` (the `Study` reduction is sim's), `open_columnar`, `Source` rewritten on `urllib` |
 | `replay/publish.py` | `replay/hub.py` | `parse_uri`, `is_hub_uri`, `fetch`, `fetch_windows`, `window_prefix`, `_coalesce`, `_window_tensor_names`, rewritten on `urllib` |
 
 ## Where the copy is not verbatim
@@ -53,7 +56,13 @@ delete and what to adapt.
    (`tests/test_pulseq.py`), including sim's half-raster widening of arbitrary-gradient spans. `to_pulseq`
    (export, pypulseq) stays in sim. `acquisition/timing.SequenceTiming.from_pulseq` now reads through the native
    reader.
-8. Module docstrings of `replay.py`, `bloch.py`, `events.py`, `field.py`, `so3.py` are rewritten for the reader;
+8. `columnar.Source` reads one pinned commit (`revision` resolved to its sha when the layout opens) on `urllib`, and
+   refuses a range request answered with anything but 206 (retried, never sliced). `ColumnarPack.image` forms the
+   voxel sums through `IMAGE_BACKENDS` (`"numpy"` here; a slab of rows at a time), takes `voxels=` (only those rows
+   are read), and `view` builds `pack_class`. Added: `plan_for_class` / `bands_for_class` (the storage rule's band
+   of a scanner class, whatever the waveform) and `pack_license`. On dedup sim's `ColumnarPack` subclasses this
+   one: `pack_class` = sim's `ReplayPack`, `IMAGE_BACKENDS` adds `"jax"`, and `image_study` stays.
+9. Module docstrings of `replay.py`, `bloch.py`, `events.py`, `field.py`, `so3.py` are rewritten for the reader;
    `replay.__all__` lists what moved.
 
 ## Found on the way (sim defects, fix on the dedup branch)

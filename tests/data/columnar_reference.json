@@ -1,0 +1,73 @@
+{
+ "sim_commit": "194dad674bcbed0343808daf991254617608e508",
+ "layouts": {
+  "columnar_float": {
+   "band_groups": [
+    16,
+    32,
+    48
+   ],
+   "K": 48,
+   "n_rows": 800,
+   "pgse_short/plan/0.25": {
+    "K": 16,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 175200
+   },
+   "pgse_short/plan/1e-12": {
+    "K": 48,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 482400
+   },
+   "pgse_long/plan/0.25": {
+    "K": 16,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 175200
+   },
+   "pgse_long/plan/1e-12": {
+    "K": 48,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 482400
+   }
+  },
+  "columnar_quant": {
+   "band_groups": [
+    4,
+    6,
+    14,
+    26,
+    48
+   ],
+   "K": 48,
+   "n_rows": 800,
+   "pgse_short/plan/0.25": {
+    "K": 6,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 38400
+   },
+   "pgse_short/plan/1e-12": {
+    "K": 48,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 110400
+   },
+   "pgse_long/plan/0.25": {
+    "K": 4,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 33600
+   },
+   "pgse_long/plan/1e-12": {
+    "K": 48,
+    "modes": 0,
+    "rows": 800,
+    "bytes": 110400
+   }
+  }
+ }
+}
