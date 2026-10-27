@@ -57,25 +57,6 @@ A B1+ *map* is not part of a Pulseq file; it is the `b1_scale` knob (per pack, o
 A b-value table (s/mm², one direction per volume) is `from_btable(bvals, bvecs, delta=, Delta=, TE=)`. A table
 carries no timing, so `delta` and `Delta` are required; nothing fills them in from a default.
 
-## From DIPY
-
-`dmipy_replay.dipy.multi_pack` is DIPY's `multi_tensor` with a pack where the tensor was: the same gradient table,
-`angles` (degrees, or unit vectors), `fractions` (percent), `S0`, `snr` (Rician), and the same return value,
-`(S, sticks)`. What it adds are the knobs:
-
-```python
-from dipy.core.gradients import gradient_table
-from dmipy_replay.dipy import multi_pack, Tissue
-
-gtab = gradient_table(bvals, bvecs=bvecs, big_delta=0.03, small_delta=0.012)   # seconds
-S, sticks = multi_pack(gtab, [bundle, bundle], angles=[(0, 0), (60, 0)], fractions=[50, 50],
-                       tissue=Tissue(T2={"intra": 0.07, "extra": 0.06, "myelin": 0.015}, chi_iso=-1e-7),
-                       TE=0.08, scanner=3.0, S0=100, snr=30)
-```
-
-It refuses a table without `big_delta`/`small_delta`, and a `tissue` without a `TE`. DIPY is never imported: the
-table is read by its attributes. `pack_licenses(packs)` gives the terms each pack is published under.
-
 ## Dependencies and licence
 
 `numpy`, nothing else. The `.rpk` container is read without the safetensors wheel (`dmipy_replay.replay.container`)
