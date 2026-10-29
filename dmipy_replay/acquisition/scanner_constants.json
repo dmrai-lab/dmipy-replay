@@ -17,7 +17,7 @@
    "derived": "value computed from a cited quantity (a slew rate from a stated rise time and amplitude); the derivation and its direction (a bound) are in context",
    "inferred": "a number for this machine carried over from a measurement on a machine of the same class, because none exists for this one; the context names the anchor and the uncertainty, the typed view returns it, needs_verification does not list it, and it is never called a measurement"
   },
-  "compiled": "2026-06-26; Bruker systems and the Connectome 2.0 / MAGNUS notes 2026-09-16 (dmipy-replay#220)"
+  "compiled": "2026-06-26; Bruker systems and the Connectome 2.0 / MAGNUS notes 2026-09-16 (dmipy-sim#220)"
  },
  "citations": {
   "siemens_prisma_web": {
@@ -674,10 +674,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 520.0,
+     "value": 522.0,
      "unit": "Hz",
      "field_T": 3.0,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (200 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (200 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -769,10 +769,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 311.0,
+     "value": 310.0,
      "unit": "Hz",
      "field_T": 3.0,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the diffusion-derated slew (62.5 T/m/s), the regime a diffusion sequence is bound by. A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the diffusion-derated slew (62.5 T/m/s), the regime a diffusion sequence is bound by. A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -844,10 +844,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 928.0,
+     "value": 960.0,
      "unit": "Hz",
      "field_T": 3.0,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (600 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (600 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -1468,10 +1468,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 784.0,
+     "value": 877.0,
      "unit": "Hz",
      "field_T": 3.0,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (500 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (500 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -1533,10 +1533,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 2100.0,
+     "value": 3012.0,
      "unit": "Hz",
      "field_T": null,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (6840 T/m/s); the paper prints 2.1 kHz. A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the hardware slew (6840 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -1706,10 +1706,10 @@
    },
    "band": {
     "certified_band_hz": {
-     "value": 2300.0,
+     "value": 4095.0,
      "unit": "Hz",
      "field_T": null,
-     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the truncation theorem on free diffusion, which bounds every restricted walk) at epsilon = 5e-3 over a 100 ms gradient-on window, at the derived slew (15,000 T/m/s); the paper prints 2.3 kHz. A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.bank.storage_band_hz), K = ceil(2 f T) bands per window; a consumer's waveform_band check reads the pack's own band",
+     "context": "the highest frequency any waveform this class can deliver needs of a replay pack: the closed-form certificate (the worst deliverable waveform's truncation on free diffusion, the whole bridge's phase variance beyond the band to infinity; the 10 um cylinder master's measured worst waveform needs the same band to within 2 %) at epsilon = 5e-3 over a 100 ms gradient-on window, at the derived slew (15,000 T/m/s). A pack built for the class is stored at this band times the storage margin (dmipy_replay.replay.storage.storage_band_hz), K = ceil(2 f T) bands per window; the storage rule is a design rule and the certificate is per waveform: a replay's band check (ReplayPack._check_band) holds every actual waveform to the pack's own stated numerical cap, whatever band the pack was stored at",
      "source_key": "fick2026_replayable_mc",
      "location": "Results, 'A pack is a band, and the band is set by the scanner'; figures/fig_band_data.npz",
      "confidence": "cited"
@@ -1823,7 +1823,7 @@
      "value": 0.5,
      "unit": "",
      "field_T": 0.064,
-     "context": "the gradient coils' symmetry parameter in the concomitant-field expansion. It is NOT a universal constant, and treating it as one is the standard silent assumption: alpha = 1/2 follows from cylindrical symmetry and holds for the fingerprint coils of a conventional bore magnet, but a Halbach array gives alpha = 0, which produces a SINGLE cross-term of double amplitude instead of the conventional pair and makes the concomitant field grow transversally rather than axially. For this machine it is 1/2, and by an argument rather than by default: de Vos et al. state the value 'also holds for parallel plate gradient coils in an open C- or H-shaped magnet', and the Swoop is an H-shaped magnet with bi-planar gradient coils. Nobody has published concomitant fields for this machine or for any bi-planar 64 mT magnet, so this is an inference from a class statement. The companion parameter beta is taken as zero, which is the symmetric-coil case; an ASYMMETRIC gradient coil adds zeroth- and first-order concomitant terms that do not vanish at isocentre MEASURED FROM GEOMETRY (dmipy-replay#364 tier 1): a Biot-Savart bi-planar pair gives alpha = 0.5000 for SQUARE plates at any gap, since square plates are four-fold symmetric about B0 and the two transverse directions are then equivalent. Both of the published values come out of that one family, so de Vos's 1/2 and 0 are one geometry at two parameter points rather than two facts. BUT THE CONTROLLING PARAMETER IS THE PAIR (width/gap, length/gap), NOT the plate aspect ratio: at a fixed aspect ratio of three, alpha runs 0.02 to 0.43 as the gap grows, because a pair whose gap dwarfs both plate dimensions degenerates to an axially symmetric dipole pair; alpha approaches 0 only when one plate dimension greatly exceeds the gap. So the inference for this machine needs BOTH ratios and this catalogue records neither, which makes 1/2 less constrained than it reads rather than more. It is not a safe default: at 64 mT with 23 mT/m over TE 110 ms, alpha = 1/2 against alpha = 0 differs by 3.85x in the concomitant field 10 cm along x and by hundreds of radians of phase, and at alpha = 0 the field VANISHES along z while growing along x, which independently reproduces de Vos's description of a single cross-term growing transversally rather than axially. One further caution the measurement exposed: alpha = 1/2 does NOT by itself mean a symmetric coil, since an asymmetric one read at 45 degrees to its own principal axes reads 1/2 as well while the concomitant field the alpha model predicts is wrong by orders of magnitude there.",
+     "context": "the gradient coils' symmetry parameter in the concomitant-field expansion. It is NOT a universal constant, and treating it as one is the standard silent assumption: alpha = 1/2 follows from cylindrical symmetry and holds for the fingerprint coils of a conventional bore magnet, but a Halbach array gives alpha = 0, which produces a SINGLE cross-term of double amplitude instead of the conventional pair and makes the concomitant field grow transversally rather than axially. For this machine it is 1/2, and by an argument rather than by default: de Vos et al. state the value 'also holds for parallel plate gradient coils in an open C- or H-shaped magnet', and the Swoop is an H-shaped magnet with bi-planar gradient coils. Nobody has published concomitant fields for this machine or for any bi-planar 64 mT magnet, so this is an inference from a class statement. The companion parameter beta is taken as zero, which is the symmetric-coil case; an ASYMMETRIC gradient coil adds zeroth- and first-order concomitant terms that do not vanish at isocentre MEASURED FROM GEOMETRY (dmipy-sim#364 tier 1): a Biot-Savart bi-planar pair gives alpha = 0.5000 for SQUARE plates at any gap, since square plates are four-fold symmetric about B0 and the two transverse directions are then equivalent. Both of the published values come out of that one family, so de Vos's 1/2 and 0 are one geometry at two parameter points rather than two facts. BUT THE CONTROLLING PARAMETER IS THE PAIR (width/gap, length/gap), NOT the plate aspect ratio: at a fixed aspect ratio of three, alpha runs 0.02 to 0.43 as the gap grows, because a pair whose gap dwarfs both plate dimensions degenerates to an axially symmetric dipole pair; alpha approaches 0 only when one plate dimension greatly exceeds the gap. So the inference for this machine needs BOTH ratios and this catalogue records neither, which makes 1/2 less constrained than it reads rather than more. It is not a safe default: at 64 mT with 23 mT/m over TE 110 ms, alpha = 1/2 against alpha = 0 differs by 3.85x in the concomitant field 10 cm along x and by hundreds of radians of phase, and at alpha = 0 the field VANISHES along z while growing along x, which independently reproduces de Vos's description of a single cross-term growing transversally rather than axially. One further caution the measurement exposed: alpha = 1/2 does NOT by itself mean a symmetric coil, since an asymmetric one read at 45 degrees to its own principal axes reads 1/2 as well while the concomitant field the alpha model predicts is wrong by orders of magnitude there.",
      "source_key": "devos2024_concomitant",
      "location": "Theory, the symmetry parameter for parallel-plate gradient coils",
      "confidence": "derived"
