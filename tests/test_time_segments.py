@@ -85,6 +85,8 @@ def test_a_backend_it_does_not_have_is_refused_by_name(lay):
 def test_a_waveform_off_the_stored_shapes_is_refused(lay):
     seq = ACQ["trap"][1]
     G = np.asarray(seq.G, np.float32).copy()
-    G[:, 100:105] *= 1.3
+    on = np.flatnonzero(np.abs(G).max(axis=(0, 2)) > 0)
+    mid = on[len(on) // 4]
+    G[:, mid:mid + 5] *= 1.3                                           # a bump on the first lobe's plateau
     with pytest.raises(ValueError, match="fits no stored partition"):
         lay.fit(dr.ScannerSequence(G=G, dt=seq.dt, rf=seq.rf, readout=seq.readout))
