@@ -23,7 +23,7 @@ ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
 MANIFEST = "manifest.json"
 TIMEOUT_S = 60
 
-__all__ = ["fetch", "fetch_windows", "manifest", "packs", "parse_uri", "is_hub_uri", "revision_of", "cache_dir"]
+__all__ = ["fetch", "fetch_windows", "fetch_tree", "manifest", "packs", "parse_uri", "is_hub_uri", "revision_of", "cache_dir"]
 
 
 # ------------------------------- URIs -------------------------------
@@ -162,6 +162,25 @@ def fetch(uri, *, revision="main"):
                 os.unlink(local)
                 raise ValueError(f"{uri}: the file's sha256 is {got}, the manifest says {rows[0]['sha256']}; refusing to load it")
     return local
+
+
+def fetch_tree(repo, paths, *, revision="main", workers=8):
+    """The files ``paths`` of the dataset ``repo`` at ``revision`` (resolved to its commit sha once) -> the local
+    directory that holds them at their paths in the repository: each downloaded once into the cache under that commit,
+    ``workers`` at a time."""
+    from concurrent.futures import ThreadPoolExecutor
+    sha = revision_of(repo, revision)
+    owner, name = repo.split("/", 1)
+    root = os.path.join(cache_dir(), f"datasets--{owner}--{name}", sha, "tree")
+
+    def one(path):
+        local = os.path.join(root, *path.split("/"))
+        if not os.path.isfile(local):
+            os.makedirs(os.path.dirname(local), exist_ok=True)
+            _download(_resolve_url(repo, path, sha), local)
+    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as ex:
+        list(ex.map(one, list(paths)))
+    return root
 
 
 # ------------------------------- windowed load (RPK.md 4.3) -------------------------------

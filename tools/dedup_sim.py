@@ -24,6 +24,8 @@ MODULES.update({"dmipy_sim.constants": "dmipy_replay.constants",
                 "dmipy_sim.spec.substrate": "dmipy_replay.spec.substrate",
                 "dmipy_sim.spec.tissue": "dmipy_replay.spec.tissue",
                 "dmipy_sim.replay._replay_kernel": "dmipy_replay.replay._replay_kernel",
+                "dmipy_sim.replay.decoded": "dmipy_replay.replay.decoded",
+                "dmipy_sim.replay.planning": "dmipy_replay.replay.planning",
                 "dmipy_sim.phantom.grid": "dmipy_replay.phantom.grid"})
 FILES = {"dmipy_sim/acquisition/scanner_constants.json", "dmipy_sim/acquisition/scanner_catalogue.schema.json",
          "dmipy_sim/spec/substrate.schema.json"}
@@ -45,7 +47,8 @@ NAMES = {}
 for name in _defs(REPLAY / "replay" / "compression.py") - {"log"}:
     NAMES[("dmipy_sim.replay.compression", name)] = "dmipy_replay.replay.compression"
 for name in ("frame_from_axis", "has_susc_path", "susc_path_coeffs", "susc_path_field", "susc_path_decode",
-             "path_field_integral", "_refuse_trace_component", "_mode_sample_matrix"):
+             "path_field_integral", "_refuse_trace_component", "_mode_sample_matrix", "path_mode_count", "_susc_path_names",
+             "_susc_path_expanded_names", "_susc_path_coeffs"):
     NAMES[("dmipy_sim.replay.bank", name)] = "dmipy_replay.replay.field"
 for name in ("CHANNEL_NAMES", "ISO_CHANNEL_NAMES", "q_of_H", "iso_P6", "iso_weights", "field_terms", "contract"):
     NAMES[("dmipy_sim.fields.hollow_cylinder", name)] = "dmipy_replay.replay.field"
@@ -60,7 +63,8 @@ for name in ("REFUSED_KEYS", "REFUSED_CHANNEL_KEYS", "REFUSED_COLUMN_KINDS", "RE
              "_refuse_predating", "ScannerField", "scanner_field", "declared_susceptibility_field", "FieldTerm",
              "field_term", "_pose_matrix", "_duration", "_echo_blocks", "compile_scheme", "_container_of",
              "_compile_continuous", "_band_phase", "_path_field_channels", "_has_aniso", "_signal_factor",
-             "_gated_contact", "surface_logweight", "replay_signal", "replay_coefficients"):
+             "_gated_contact", "surface_logweight", "replay_signal", "replay_coefficients", "NUMERICAL_TERMS",
+             "truncation_budget", "_measured_mode_variance", "CONTINUOUS_BAND_CAP"):
     NAMES[("dmipy_sim.replay.replay", name)] = "dmipy_replay.replay.replay"
 for name in ("STORAGE_BAND_MARGIN", "storage_band_hz", "mode_count"):
     NAMES[("dmipy_sim.replay.bank", name)] = "dmipy_replay.replay.storage"
@@ -68,6 +72,13 @@ for name in ("is_hub_uri", "parse_uri", "fetch", "fetch_windows", "window_prefix
     NAMES[("dmipy_sim.replay.publish", name)] = "dmipy_replay.replay.hub"
 for name in ("from_pulseq", "pulseq_timing"):
     NAMES[("dmipy_sim.sequences.pulseq", name)] = "dmipy_replay.sequences.pulseq"
+NAMES[("dmipy_sim.replay.study", "Primitives")] = "dmipy_replay.replay.primitives"
+for name in ("MANIFEST", "FORMAT", "TILE", "WORD_BITS", "_RTOL", "_AXES", "read_manifest", "_check_format", "_decode",
+             "unpack_words", "_sequence", "_lobes", "_group_key", "Shape", "Partition", "_layout_of", "_field_of_tiers",
+             "Delivered", "_field_terms_of_words", "_field_offset", "_phase", "_row_terms"):
+    NAMES[("dmipy_sim.replay.time_segments", name)] = "dmipy_replay.replay.time_segments"
+for name in ("_POS_RANGE", "_MODE_RANGE", "_Stub", "_Skeleton", "_NP"):
+    NAMES[("dmipy_sim.replay.remote", name)] = "dmipy_replay.replay.remote"
 
 #: definitions deleted from the subset modules (they live in replay now)
 DELETE = {}
