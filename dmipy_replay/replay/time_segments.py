@@ -1089,7 +1089,7 @@ def _field_terms_of_words(tw, fspec, on_torch):
     """``(iso, aniso)`` float64 of every row from its int32 tier words ``tw`` ``(chunk, tile, n_words)``: each stored
     channel's integer shifted out of its word, made float64 and times its scale (exact: a code of at most 24 bits
     times a float32 scale), then weighted by the direction's contraction coefficients and summed in channel order, the
-    products written out (a float32 matmul on CUDA is TF32); ``None`` for a term with no stored channel."""
+    products written out (a float32 matmul on a GPU may round its inputs to TF32); ``None`` for a term with no stored channel."""
     layout, scale, coef, n_iso = fspec
     iso = aniso = None
     for j, (w, off, b) in enumerate(layout):
@@ -1121,7 +1121,7 @@ def _field_offset(tw, fspec, a_iso, a_aniso, w, on_torch):
 def _phase(comps, levels, per_tile):
     """``sum_{s,c} m_sc L_sc`` ``(chunk, tile, M_pad)`` from the decoded components ``comps`` (segment-major, ``None``
     for a 0-bit field) and the levels: ``(M_pad, n_seg, 3)``, or with ``per_tile`` ``(chunk, M_pad, n_seg, 3)`` (a
-    delivery's per voxel); the products written out (a float32 matmul on CUDA is TF32)."""
+    delivery's per voxel); the products written out (a float32 matmul on a GPU may round its inputs to TF32)."""
     ph = None
     for f, c in enumerate(comps):
         if c is None:

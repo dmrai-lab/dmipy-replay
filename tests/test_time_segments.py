@@ -1,5 +1,5 @@
 """The time-segment layout read here against dmipy-sim's own reads of the same layout (``tools/make_segment_fixtures.py``):
-the words, the tiers and the fits are the same code and the same bits; the image is the same float32 arithmetic on
+the words and the tiers are the same code and the same bits, the fits the same to the least-squares solver's rounding; the image is the same float32 arithmetic on
 numpy that sim's kernel runs on JAX, equal to the float32 rounding of the phases."""
 import json
 from pathlib import Path
@@ -38,7 +38,8 @@ def test_the_words_decode_to_sims_vectors_and_tiers(lay):
 def test_a_sequence_fits_sims_partition_at_sims_levels(lay, key):
     name, L = lay.fit(ACQ[key][1])
     assert name == INFO[f"{key}/partition"] == ACQ[key][0]
-    np.testing.assert_array_equal(L, REF[f"{key}/levels"])
+    # shaped and overlapping terms take a least-squares fit, whose last bits are the LAPACK build's
+    np.testing.assert_allclose(L, REF[f"{key}/levels"], rtol=1e-10, atol=1e-12 * float(np.abs(REF[f"{key}/levels"]).max()))
 
 
 @pytest.mark.parametrize("key", sorted(ACQ))

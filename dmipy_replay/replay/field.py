@@ -42,7 +42,7 @@ def field_terms(channels, b0_dir, axis=-1):
     order, 6 or 12 of them: ``iso_P_zz`` is formed from the trace identity) for a field direction: ``(iso, aniso)``
     with ``iso = iso_local - Q . iso_P`` and ``aniso = Q . aniso_G`` (``None`` when the channels carry no
     anisotropic basis). ``dB = B0 (chi_iso iso + chi_aniso aniso)``: the one contraction of every route, grid, path
-    and pack. A torch tensor is contracted on its own device in float64 (a float32 matmul on CUDA is TF32) and stays
+    and pack. A torch tensor is contracted on its own device in float64 (a float32 matmul on a GPU may round its inputs to TF32) and stays
     there; anything else on the host."""
     q, w = q_of_H(b0_dir), iso_weights(b0_dir)
     if type(channels).__module__.split(".")[0] == "torch":
