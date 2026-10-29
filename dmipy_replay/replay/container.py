@@ -3,8 +3,8 @@
 A safetensors file is an 8-byte little-endian header length ``n``, ``n`` bytes of JSON -- per tensor its ``dtype``,
 ``shape`` and ``data_offsets`` into the buffer that follows, and the string map ``__metadata__`` -- then the buffer.
 There is no code in it to execute, which is why the format was chosen; reading it needs no library. A read maps the
-file and returns each tensor as a read-only view of the mapping, so a pack of many gigabytes costs the pages a replay
-touches.
+file copy-on-write and returns each tensor as a view of the mapping, so a pack of many gigabytes costs the pages a
+replay touches, and a reader that writes into a tensor changes its own copy, never the file.
 """
 import json
 import mmap
@@ -37,7 +37,7 @@ def parse_header(blob):
 
 def tensor_of(buf, entry, name="tensor"):
     """One tensor from its header ``entry`` over the data buffer ``buf`` (bytes-like, starting at the buffer's
-    offset 0): a read-only view."""
+    offset 0): a view of it, writable when the buffer is."""
     dtype = entry["dtype"]
     if dtype not in DTYPES:
         raise NotImplementedError(f"{name}: safetensors dtype {dtype!r} has no numpy dtype")
@@ -51,13 +51,13 @@ def tensor_of(buf, entry, name="tensor"):
 
 
 def read_safetensors(path):
-    """``(arrays, metadata)`` of the safetensors file at ``path``: every tensor as a read-only view of the mapped file,
-    and the ``__metadata__`` string map (``{}`` when the file has none)."""
+    """``(arrays, metadata)`` of the safetensors file at ``path``: every tensor as a view of the file mapped
+    copy-on-write, and the ``__metadata__`` string map (``{}`` when the file has none)."""
     with open(os.fspath(path), "rb") as f:
         size = os.fstat(f.fileno()).st_size
         if size < 8:
             raise ValueError(f"{path}: not a safetensors file ({size} bytes)")
-        m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_COPY)
     n, header = parse_header(m[:8 + min(int.from_bytes(m[:8], "little"), MAX_HEADER)])
     meta = header.pop("__metadata__", None) or {}
     buf = memoryview(m)[8 + n:]

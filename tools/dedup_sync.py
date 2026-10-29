@@ -181,6 +181,7 @@ def main():
     ap.add_argument("--rev", default="HEAD")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--add", nargs="*", default=[])
+    ap.add_argument("--force", nargs="*", default=[], help="module:NAME diverged here, replaced all the same")
     ap.add_argument("--only", nargs="*", default=None, help="replay modules to report/apply")
     a = ap.parse_args()
     extra = {tuple(s.split(":")) for s in a.add}
@@ -212,7 +213,7 @@ def main():
             n = rewrite(new[name][0], new[name][1], mod, extra, unresolved)
             if c == n:
                 continue
-            if mine[name] == c or mine[name] == norm(cut[name][0]):
+            if mine[name] == c or mine[name] == norm(cut[name][0]) or f"{mod}:{name}" in a.force:
                 print(f"  out of date      {name}")
                 if a.apply:
                     text = text.replace(mine[name], n, 1)

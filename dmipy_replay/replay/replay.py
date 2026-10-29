@@ -42,12 +42,15 @@ from functools import cached_property
 import numpy as np
 
 from .compression import c2_bands_K as _cx_bands_K
+from .decoded import PackArrays
+from .planning import PLAN_TOL, ReadPlan, planned
 
 from ..constants import GAMMA
 
 from ..acquisition.scanner_sequence import Protocol, ScannerSequence
 
 __all__ = ["ReplayPack", "read_rpk", "compile_scheme", "replay_signal", "replay_coefficients", "surface_logweight"]
+
 
 def read_rpk(path, *, cls=None):
     """Read a replay pack into a :class:`ReplayPack` (arrays + metadata). A pack that embeds no substrate spec, or
@@ -73,6 +76,7 @@ REFUSED_TENSORS = ("positions", "compartment", "boundary_local_time", "susc_fiel
                    "dct_coeffs", "modes", "blt_dct_coeffs")
 
 REFUSED_TENSOR_INFIX = "_rle_"
+
 
 def _refuse_predating(meta, where, tensors=()):
     """Refuse, by name, a pack this revision does not read (RPK.md 9.5.1): a header with ``n_t`` or ``dt_traj`` (in
@@ -110,6 +114,7 @@ def _refuse_predating(meta, where, tensors=()):
                          "with a conformant producer. A pack is never converted."
                          + (f" (Also: {', '.join(found[1:])}.)" if found[1:] else ""))
 
+
 @dataclass(frozen=True)
 class ScannerField:
     """What a replay reads from its one ``scanner=`` knob: the static field's strength in tesla (``None``
@@ -125,6 +130,7 @@ class ScannerField:
     B0: object = None
     axis: tuple = (0.0, 0.0, 1.0)
     name: str = None
+
 
 def scanner_field(scanner):
     """Resolve ``scanner=`` -- ``None``, a field strength in tesla, or a
@@ -145,6 +151,7 @@ def scanner_field(scanner):
         raise TypeError("scanner is a ScannerLimits (ScannerLimits.of('connectom')) or a field strength in tesla, not a name")
     return ScannerField(B0=float(scanner))
 
+
 def declared_susceptibility_field(meta, *, has_field):
     """The susceptibility field (``"present"`` / ``"absent"``) a pack's (or a layout's) metadata ``meta`` declares
     through its embedded substrate spec's pools, with ``has_field`` whether it stores the field channel (C3):
@@ -152,6 +159,7 @@ def declared_susceptibility_field(meta, *, has_field):
     every disagreement between magnetic pools, the ``"field"`` tier and the stored channel."""
     from ..spec.substrate import susceptibility_field_of
     return susceptibility_field_of(meta.get("substrate"), stores_field=has_field, name=meta.get("id"))
+
 
 @dataclass(frozen=True)
 class FieldTerm:
@@ -168,7 +176,8 @@ class FieldTerm:
     def active(self):
         return self.B0 is not None
 
-def field_term(declared, tissue, scanner):
+
+def field_term(declared, tissue, scanner, envelope=None):
     """The susceptibility term a substrate's field, a tissue and a scanner give together: the one place a tissue's
     ``chi_iso`` / ``chi_aniso`` meets a substrate's susceptibility field ``declared`` (``"present"`` / ``"absent"``:
     a pack's from its spec's pools, :func:`declared_susceptibility_field`; an analytic or inert phantom substrate's
@@ -181,7 +190,9 @@ def field_term(declared, tissue, scanner):
       ``chi_iso`` or ``chi_aniso`` is refused by name; any ``B0``, of any strength along any axis, is accepted
       and has no effect.
     * ``"present"``: a non-zero tissue chi needs a field to act in, so one given with ``scanner=None`` is refused.
-      A zero or absent chi at any ``B0`` is a field term of zero.
+      A zero or absent chi at any ``B0`` is a field term of zero. With a field ``envelope`` (``{"B0_max",
+      "B0_chi_max"}``, a pack's :attr:`ReplayPack.field_envelope`), a term at a ``B0`` above ``B0_max`` or a
+      ``|B0| (|chi_iso| + |chi_aniso|)`` above the certified ``B0_chi_max`` is refused, naming both.
 
     Returns a :class:`FieldTerm`, inactive (``B0`` None) whenever the term is zero."""
     from ..spec.substrate import SUSCEPTIBILITY_FIELD
@@ -208,7 +219,19 @@ def field_term(declared, tissue, scanner):
             "chi_iso / chi_aniso for the field-free signal")
     if float(f.B0) == 0.0:
         return FieldTerm(axis=f.axis)
-    return FieldTerm(B0=float(f.B0), axis=f.axis, chi_iso=given.get("chi_iso", 0.0), chi_aniso=given.get("chi_aniso", 0.0))
+    term = FieldTerm(B0=float(f.B0), axis=f.axis, chi_iso=given.get("chi_iso", 0.0), chi_aniso=given.get("chi_aniso", 0.0))
+    if envelope is not None:
+        B0, top = abs(term.B0), float(envelope["B0_max"])
+        if B0 > top * (1.0 + 1e-9):
+            raise ValueError(f"B0 = {B0:.4g} T is beyond the {top:.4g} T this pack's field tier is certified at "
+                             "(replay_envelope.acquisition.B0_list): replay within it")
+        scale, cert = B0 * (abs(term.chi_iso) + abs(term.chi_aniso)), float(envelope["B0_chi_max"])
+        if scale > cert * (1.0 + 1e-9):
+            raise ValueError(f"B0 (|chi_iso| + |chi_aniso|) = {scale:.4g} T is beyond the certified field scale "
+                             f"{cert:.4g} T (the largest B0_list entry times replay_envelope.tissue.chi_max): replay "
+                             "a smaller susceptibility or field")
+    return term
+
 
 def _numpy_bloch():
     """The numpy vector-Bloch propagator, the reference (:func:`~dmipy_replay.replay.bloch.replay_bloch`)."""
@@ -223,10 +246,26 @@ def _pose_matrix(pose):
     R = getattr(pose, "rotation", pose)
     return np.asarray(R, np.float64).reshape(3, 3)
 
+
 class ReplayPack:
     """A replay pack: the channel ``arrays`` plus ``meta``, with ``load`` / ``save`` and the one
     consume path, :meth:`replay`. Accessors mirror the walk parameters (``n_t``, ``dt``, ``K``,
     ``n_walkers``) and the tiers carried (``has_relaxation``, ``has_surface``, ``has_field``)."""
+
+    @staticmethod
+    def open(uri, workers=8):
+        """A pack open by reference. ``hf://owner/name/path.rpk`` is a single pack on the Hub, a
+        :class:`~dmipy_replay.replay.remote.RemotePack`: it plans an acquisition from the file's header and fetches by HTTP
+        range only the tensors the plan names (``load()`` downloads the whole file). Any other ``uri`` is the columnar layout
+        (a directory, or ``hf://owner/name/prefix`` on the Hub), open by reference:
+        a :class:`~dmipy_replay.replay.columnar.ColumnarPack`, whose ``view`` gives a :class:`ReplayPack` of the rows
+        and bands an acquisition needs and whose ``image`` replays a whole grid in one pass over the rows."""
+        from .hub import is_hub_uri
+        if is_hub_uri(uri) and uri.endswith(".rpk"):
+            from .remote import RemotePack
+            return RemotePack(uri)
+        from .columnar import open_columnar
+        return open_columnar(uri, workers=workers)
 
     #: the vector-Bloch propagators by name: a factory returning the function (``bloch.replay_bloch``'s arguments)
     BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch()}
@@ -237,9 +276,44 @@ class ReplayPack:
         return _as_distribution(orientation)
 
     def __init__(self, arrays, meta, source=None):
-        self.arrays = dict(arrays)
+        self.arrays = arrays
         self.meta = dict(meta)
         self.source = source
+
+    @property
+    def arrays(self):
+        """The pack's tensors by name, a :class:`~dmipy_replay.replay.decoded.PackArrays`: assigning a mapping gives the
+        pack its tensors with an empty decoded cache."""
+        return self._arrays
+
+    @arrays.setter
+    def arrays(self, arrays):
+        self._arrays = PackArrays(arrays)
+
+    @property
+    def decoded_bytes(self):
+        """Bytes of decoded coefficient arrays this pack holds (:meth:`release_decoded`)."""
+        return self.arrays.decoded.nbytes
+
+    @property
+    def decode_budget(self):
+        """Bytes of decoded arrays this pack may hold, settable: :data:`~dmipy_replay.replay.decoded.DECODE_BUDGET_BYTES`
+        (1 GiB) unless set. The readers (:func:`~dmipy_replay.replay.compression.read_position_coeffs`,
+        :func:`~dmipy_replay.replay.bank.susc_path_coeffs`, :func:`~dmipy_replay.replay.compression.bridge_bands`,
+        :func:`~dmipy_replay.replay.compression.occupancy_events`) decode each selection of the pack's stored tensors once
+        and every later call of :meth:`replay`, :meth:`walker_signals`, :meth:`walker_phases` and the rest reads the
+        held read-only array; an array that does not fit beside what is held is decoded on every call, as
+        without the cache. The windows of a pack share its budget, and a view, prefix or any other pack built from this
+        one holds its own."""
+        return self.arrays.decoded.budget
+
+    @decode_budget.setter
+    def decode_budget(self, nbytes):
+        self.arrays.decoded.budget = int(nbytes)
+
+    def release_decoded(self):
+        """Drop every decoded array this pack (and its windows) holds; the next read decodes again."""
+        self.arrays.decoded.clear()
 
     @classmethod
     def load(cls, path, *, windows=None, **kw):
@@ -323,7 +397,9 @@ class ReplayPack:
         per = fid.pop("windows", None)
         meta["fidelity"] = dict(per[i]) if per else fid
         meta.setdefault("provenance", {})["window"] = dict(index=i, of=n, parent_id=self.meta.get("id"))
-        return type(self)(self._window_arrays(i), meta, source=self.source)
+        out = type(self)(self._window_arrays(i), meta, source=self.source)
+        out.arrays.decoded = self.arrays.decoded                  # one budget, and a window decoded once, for all of them
+        return out
 
     def _windows(self):
         """``[(pack, t0, T), ...]``: the windows of the walk this pack actually holds, each as a pack, the instant it
@@ -358,11 +434,28 @@ class ReplayPack:
         """The largest ``rho2 / D`` the contact tier serves (``replay_envelope.tissue.rho2_over_D_max``, RPK.md 8.7), or
         ``None`` when the pack states no bound. ``replay_envelope.tissue`` knows only this one key; any other
         key there is refused by name, naming what is accepted."""
+        return self._envelope_tissue().get("rho2_over_D_max")
+
+    def _envelope_tissue(self):
+        """``replay_envelope.tissue``: it knows ``rho2_over_D_max`` and ``chi_max``; any other key is refused by name."""
         tissue = (self.meta.get("replay_envelope") or {}).get("tissue") or {}
-        unknown = set(tissue) - {"rho2_over_D_max"}
+        unknown = set(tissue) - {"rho2_over_D_max", "chi_max"}
         if unknown:
-            raise ValueError(f"this pack's replay_envelope.tissue declares {sorted(unknown)}; it takes only rho2_over_D_max")
-        return tissue.get("rho2_over_D_max")
+            raise ValueError(f"this pack's replay_envelope.tissue declares {sorted(unknown)}; it takes only "
+                             "rho2_over_D_max and chi_max")
+        return tissue
+
+    @property
+    def field_envelope(self):
+        """The field tier's envelope, ``{"B0_max", "chi_max", "B0_chi_max"}``: the largest field strength
+        (``replay_envelope.acquisition.B0_list``), the susceptibility scale (``replay_envelope.tissue.chi_max``) and
+        their product, the one certified field scale every field term was read at; ``None`` when the pack stores no
+        field or states neither. A replay beyond it is refused (:func:`field_term`)."""
+        chi = self._envelope_tissue().get("chi_max")
+        B0s = ((self.meta.get("replay_envelope") or {}).get("acquisition") or {}).get("B0_list")
+        if chi is None or not B0s:
+            return None
+        return dict(B0_max=float(max(B0s)), chi_max=float(chi), B0_chi_max=float(max(B0s)) * float(chi))
 
     def _check_rho2(self, rho2_over_D):
         """Refuse a relaxivity beyond the contact tier's envelope (:attr:`rho2_over_D_max`), naming both."""
@@ -726,9 +819,18 @@ class ReplayPack:
         from ..spec.tissue import _by_pool_id
         return [float(v) for v in _by_pool_id(spec, values, what)]
 
-    def replay(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None, complex_signal=False):
+    def replay(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None, complex_signal=False,
+               tol=PLAN_TOL, K=None, modes=None):
         """The signal of ``waveform`` on this pack: the gradient always, and every other tier whose inputs are given
         and which the pack carries.
+
+        **Plan before read.** Only the position bands and field modes the acquisition needs are decoded: the fewest
+        whose truncation costs at most ``tol`` times the pack's Monte-Carlo floor (:meth:`plan`). The signal returned is a
+        :class:`~dmipy_replay.replay.planning.Planned` array (an ``ndarray``) whose ``.plan`` is the
+        :class:`~dmipy_replay.replay.planning.ReadPlan` of this call: the bands and modes read, their planned error and the
+        source of the variances. ``K=`` and ``modes=`` read that many instead (the error of that read is stated the same
+        way); ``tol=None`` reads every stored band and mode. The result is bit for bit the replay of a full decode cut at
+        the same ``K`` and ``modes``. A pose distribution (``orientation=``) is the pose expansion's and reads every band.
 
         ``waveform`` is a :class:`~dmipy_replay.acquisition.scanner_sequence.ScannerSequence`: its ``G_eff``, the
         effective gradient, is what this route integrates, and its RF schedule says where the 180 is (a schedule
@@ -769,23 +871,27 @@ class ReplayPack:
         """
         waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
         if isinstance(waveform, Protocol):                # a multi-TE scheme: each sequence replayed, placed at its rows
-            kw = dict(tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, complex_signal=complex_signal)
-            return waveform.scatter([self.replay(seq, **kw) for seq in waveform])
+            kw = dict(tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
+                      complex_signal=complex_signal, tol=tol, K=K, modes=modes)
+            parts = [self.replay(seq, **kw) for seq in waveform]
+            out = planned(waveform.scatter(parts), tuple(p.plan for p in parts))      # one plan per sequence
+            return out
         view = self._at_tissue(tissue)
         if view is not self:
             return view.replay(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
-                               compartment=compartment, complex_signal=complex_signal)
+                               compartment=compartment, complex_signal=complex_signal, tol=tol, K=K, modes=modes)
         dist = self._as_distribution(orientation)
         if dist is not None:
             S = self.pose_response(waveform, tissue=tissue, scanner=scanner, compartment=compartment).compose(dist)
-            return S if complex_signal else np.abs(S)
-        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment)
+            return planned(S if complex_signal else np.abs(S), self._full_plan("the pose expansion reads every band and mode"))
+        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
+                          read=dict(tol=tol, K=K, modes=modes))
         E = _signal_factor(self._walker_phases(P, waveform), P["voxel"])
         S = (P["pathway"] * P["ew"][:, None] * E).sum(0) / P["norm"]
-        return S if complex_signal else np.abs(S)
+        return planned(S if complex_signal else np.abs(S), P["plan"])
 
     def walker_signals(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None,
-                       b1_scale=None, off_resonance_T=None):
+                       b1_scale=None, off_resonance_T=None, tol=PLAN_TOL, K=None, modes=None):
         """The replay **before the ensemble mean**: ``(w, ew, E)`` with ``w`` the walkers' statistical weights
         ``(n_w,)``, ``ew`` those weights with the relaxation and surface terms applied, and ``E`` the complex
         signal factor of every walker at every measurement, ``(n_w, n_meas)``.
@@ -794,7 +900,9 @@ class ReplayPack:
         voxel they started in, which is what partitions one walk into a phantom (RPH.md) -- is the same sum
         over its members with its own normaliser. Knobs resolve as in :meth:`replay`. An unbalanced encoding's
         voxel factor (:meth:`ScannerSequence.voxel_factor`) is carried in ``E`` as a per-measurement scale,
-        so the sum above is the voxel's signal. With ``b1_scale`` (a scalar or per walker) or
+        so the sum above is the voxel's signal. Only the bands and modes the plan names are decoded (``tol=``, ``K=``,
+        ``modes=`` as in :meth:`replay`); ``E`` is a :class:`~dmipy_replay.replay.planning.Planned` array whose ``.plan`` is the
+        read's :class:`~dmipy_replay.replay.planning.ReadPlan`. With ``b1_scale`` (a scalar or per walker) or
         ``off_resonance_T`` (a scalar or per walker) given, ``E`` comes from the RF-aware route
         (:meth:`replay_bloch`): the transverse magnetisation of each walker at the readout, with the relaxation
         the route applied itself, so ``ew`` is then ``w``.
@@ -803,24 +911,26 @@ class ReplayPack:
         view = self._at_tissue(tissue)
         if view is not self:
             return view.walker_signals(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
-                                       compartment=compartment, b1_scale=b1_scale, off_resonance_T=off_resonance_T)
+                                       compartment=compartment, b1_scale=b1_scale, off_resonance_T=off_resonance_T,
+                                       tol=tol, K=K, modes=modes)
         if b1_scale is None and off_resonance_T is None:
-            P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment)
+            P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
+                              read=dict(tol=tol, K=K, modes=modes))
             w = np.asarray(self.spin_weights, np.float64)
-            return w, P["pathway"] * P["ew"], _signal_factor(self._walker_phases(P, waveform), P["voxel"])
+            return w, P["pathway"] * P["ew"], planned(_signal_factor(self._walker_phases(P, waveform), P["voxel"]), P["plan"])
         E = self.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner,
                               orientation=orientation, compartment=compartment, complex_signal=True, per_walker=True)
         w = np.asarray(self.spin_weights, np.float64)
-        return w, w, E
+        return w, w, planned(E, self._full_plan("the vector-Bloch route reads every band and mode"))
 
     def walker_phases(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None,
-                      weights=None):
+                      weights=None, tol=PLAN_TOL, K=None, modes=None):
         """:meth:`walker_signals` before the complex exponential: ``(w, ew, phi)`` with ``phi`` the accumulated
         phase of every walker at every measurement, ``(n_w, n_meas)`` real, so that ``E = exp(1j * phi)``. A
         consumer that reduces many walkers over its own groups (an image: the walkers of each voxel) takes the
         phase and forms the exponential and the sums where it accumulates them, on its device; the exponential
         over ``(n_w, n_meas)`` is the one host operation of a replay that does not amortise. Knobs resolve as in
-        :meth:`replay`; the RF-aware route has no phase (its signal is the magnetisation vector itself) and is
+        :meth:`replay` (the plan, ``tol=`` / ``K=`` / ``modes=``, is :meth:`replay`'s, on ``phi.plan``); the RF-aware route has no phase (its signal is the magnetisation vector itself) and is
         :meth:`walker_signals` with ``b1_scale`` or ``off_resonance_T``. An unbalanced encoding is refused
         here: its voxel factor is an amplitude per measurement, which a phase cannot carry, and a consumer
         that formed its own sums would silently omit it -- :meth:`walker_signals` carries it in ``E``."""
@@ -828,8 +938,9 @@ class ReplayPack:
         view = self._at_tissue(tissue)
         if view is not self:
             return view.walker_phases(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
-                                      compartment=compartment, weights=weights)
-        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment)
+                                      compartment=compartment, weights=weights, tol=tol, K=K, modes=modes)
+        read = dict(tol=tol, K=K, modes=modes) if weights is None else dict(tol=None, K=None, modes=None)   # a caller's weights are on every band
+        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, read=read)
         if np.any(P["voxel"] != 1.0):
             raise ValueError(
                 "this encoding leaves a net moment at the readout, so the voxel's extent multiplies the signal by "
@@ -839,7 +950,7 @@ class ReplayPack:
         if weights is not None:
             P["W"] = self._check_weights(weights, P, orientation)
         w = np.asarray(self.spin_weights, np.float64)
-        return w, P["pathway"] * P["ew"], self._walker_phases(P, waveform)
+        return w, P["pathway"] * P["ew"], planned(self._walker_phases(P, waveform), P["plan"])
 
     def _check_weights(self, weights, P, orientation):
         """Validate a caller's per-position replay weights, and refuse the cases this route cannot serve.
@@ -890,14 +1001,14 @@ class ReplayPack:
         (dmipy-sim#484)."""
         n_w, dt = P["n_w"], P["dt"]
         phi = _band_phase(P, W=P.get("W"))                                            # (n_w, n_meas)
-        if P["B0"] is None:                                                          # a field term of zero (field_term)
+        if P["B0"] is None or P["M_use"] == 0:                                       # a field term of zero (field_term), or a plan that reads no mode
             return phi
         ch, b0_dir, B0, chi_aniso = P["ch"], P["b0_dir"], P["B0"], P["chi_aniso"]
-        gm = ch["susceptibility_grid"]
+        gm = ch.get("susceptibility_grid")
         chi_i = float(P["chi_iso"])
         if ch.get("susc_field_basis") is None:
             raise ValueError("this replay has a field term and the pack carries no field channel (C3)")
-        from .field import contract                                 # the field route: every term a contraction
+        from .field import contract# the field route: every term a contraction
         Psi, names = _path_field_channels(P, waveform)
         aniso = chi_aniso if (_has_aniso(gm, names) and chi_aniso) else 0.0
         return phi + contract(Psi, b0_dir, B0=float(B0), chi_iso=chi_i, chi_aniso=aniso)[:, None]
@@ -1079,23 +1190,29 @@ class ReplayPack:
         from .field import susc_path_decode, susc_path_field
         if P["B0"] is None:
             return np.zeros((P["n_w"], int(n_s)))                                     # a field term of zero (field_term)
-        gm = P["ch"]["susceptibility_grid"]
+        gm = P["ch"].get("susceptibility_grid")
         pm = P["ch"].get("susc_field_basis")
         if pm is None:
             raise ValueError("this replay has a field term and the pack carries no field channel (C3)")
         b, _ = susc_path_decode(self.arrays, pm, n_t=int(n_s), n_w=P["n_w"])
         return susc_path_field(b, P["b0_dir"], B0=float(P["B0"]), chi_iso=float(P["chi_iso"]),
-                               chi_aniso=P["chi_aniso"], has_aniso=bool(gm.get("has_aniso")))
+                               chi_aniso=P["chi_aniso"], has_aniso=_has_aniso(gm, pm.get("channels")))
 
     def _prepare(self, waveform, *, tissue, scanner, orientation, compartment, relaxation=True, surface=True,
-                 pathway=True):
+                 pathway=True, read=None, any_field=False):
         """Everything a replay resolves before it reads the bands: the waveform (its physical and its effective gradient,
         rotated into the substrate frame when a pose is given), the tissue's values (none for ``None``), the susceptibility
         term :func:`field_term` resolves from the pack's declared field, the tissue's chi and the scanner's B0 (``B0``
         None when that term is zero; its direction the machine's B0 axis turned by the pose), the per-walker weights
         with the relaxation and surface terms applied, and the compartment selection.
 
-``pathway`` asks for the amplitude of the coherence pathway the sequence's readout IS
+``read`` (``dict(tol=, K=, modes=)``, as :meth:`replay` takes them) plans the read (:meth:`plan`): ``plan``
+        is then the :class:`~dmipy_replay.replay.planning.ReadPlan` and ``K_use`` / ``M_use`` the bands and modes the
+        contraction decodes; without it ``plan`` is ``None`` and the contraction reads every stored band and mode.
+        ``any_field`` plans the modes for a field term to come (the primitives of an acquisition, whose tissue and
+        scanner are applied later).
+
+        ``pathway`` asks for the amplitude of the coherence pathway the sequence's readout IS
         (:func:`~dmipy_replay.acquisition.epg.pathway_weight`): 1 for a refocused echo, and a stimulated echo's
         ``0.5 sin a1 sin a2 sin a3`` for a store-and-recall schedule. It is returned BESIDE the weights and
         not folded into them, because ``ew`` means the relaxation and surface terms and a codec oracle checks
@@ -1128,7 +1245,7 @@ class ReplayPack:
                             f"got {type(tissue).__name__}")
         t = tissue if tissue is not None else Tissue()
         T2, T1, rho2, rho1, D = t.T2, t.T1, t.rho2, t.rho1, t.D
-        field = field_term(self.susceptibility_field, tissue, scanner)   # the one rule of tissue chi x pack field x B0
+        field = field_term(self.susceptibility_field, tissue, scanner, self.field_envelope)   # the one rule of tissue chi x pack field x B0
         if field.active and not self.has_field:
             raise ValueError(f"pack {self.meta.get('id')!r} declares its susceptibility field present and this replay "
                              "has a field term, but the pack holds no field channel (C3) here: read it with its field "
@@ -1198,6 +1315,11 @@ class ReplayPack:
         ew = w * np.exp(logw)
         norm = w.sum()
         ew, norm = self._select(compartment, ew, norm, w, ch, n_w)
+        plan = K_use = M_use = None
+        if read is not None:
+            gate = waveform.effective_gate if waveform.gate is None else waveform.gate
+            plan = self._read_plan(G_eff, dt_wf, gate, windows, field, any_field=any_field, **read)
+            K_use, M_use = plan.K, plan.modes
         from ..acquisition.epg import pathway_weight
         # the voxel's factor for an unbalanced encoding (dmipy-sim#375), or the refusal without a voxel size;
         # read on the LAB waveform, since the voxel is the scanner's and the dot product k . r_v is the same in
@@ -1206,12 +1328,155 @@ class ReplayPack:
         return dict(G=G, dt=dt, dt_wf=dt_wf, ch=ch, n_w=n_w, w=w, ew=ew, norm=norm, B0=B0,
                     pathway=(pathway_weight(waveform) if pathway else 1.0), voxel=voxel,
                     b0_dir=b0_dir, chi_iso=chi_iso, chi_aniso=chi_aniso, T2=T2, T1=T1, rho2=rho2, rho1=rho1, D=D,
-                    G_eff_wf=G_eff, windows=windows, gate_wf=gate_wf, gate_cum=gate_cum)
+                    G_eff_wf=G_eff, windows=windows, gate_wf=gate_wf, gate_cum=gate_cum, plan=plan, K_use=K_use, M_use=M_use)
 
     def _n_pool_ids(self, col):
         """How many pool ids the ``comp`` column addresses, read over every window."""
         key = "comp_static" if col["kind"] == "static" else "comp_events_label"
         return int(max(int(np.max(w.arrays[key])) for w, _, _ in self._windows())) + 1
+
+    def plan(self, waveform, *, tissue=None, scanner=None, orientation=None, tol=PLAN_TOL, K=None, modes=None):
+        """What a replay of ``waveform`` reads of this pack, before it reads: a :class:`~dmipy_replay.replay.planning.ReadPlan`
+        with the position bands ``K`` and field modes ``modes`` the acquisition needs, the truncation error each costs and
+        the source of the variances it was weighed with.
+
+        The plan is the fewest bands, and the fewest modes, whose dropped tail costs at most ``tol`` times the pack's
+        Monte-Carlo floor (``fidelity.floor_max``): the rule of the columnar layout's planner
+        (:meth:`~dmipy_replay.replay.columnar.ColumnarPack.plan`), in :mod:`~dmipy_replay.replay.planning`. The band variances are
+        the header's measured record where it holds one, else the free bridge's at the pack's diffusivity -- no band is
+        decoded to plan; the mode variances are the header's record, else measured on a pilot of the pack's walkers and
+        held in the pack's decoded cache. The modes are weighed at the pack's certified field scale (``field_envelope``: the largest
+        ``B0`` and ``chi``) when it states one, else at the term's own, so the replay, its per-walker depth and the primitives
+        read the same modes. A pack with neither is refused by name. The bands are planned for the
+        acquisition as the pose turns it (``orientation=``, one pose); a field is planned only when ``tissue`` and
+        ``scanner`` resolve to a field term. ``K=`` / ``modes=`` state the counts instead (the plan then carries their
+        error); ``tol=None`` is the full read, every stored band and mode, an error of zero against the stored pack.
+        A replay called with the same arguments reads exactly this plan."""
+        waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
+        view = self._at_tissue(tissue)
+        if view is not self:
+            return view.plan(waveform, tissue=tissue, scanner=scanner, orientation=orientation, tol=tol, K=K, modes=modes)
+        if self._as_distribution(orientation) is not None:
+            return self._full_plan("a pose distribution is the pose expansion's, which reads every band and mode")
+        G_eff = np.asarray(waveform.G_eff, np.float64)
+        if orientation is not None:
+            G_eff = G_eff @ self.pose_rotation(orientation)
+        T_acq = _duration(waveform)
+        self._assert_windows_reach(T_acq)
+        windows = self._windows()[:self._span(T_acq)[1]]
+        field = field_term(self.susceptibility_field, tissue, scanner, self.field_envelope)
+        gate = waveform.effective_gate if waveform.gate is None else waveform.gate
+        return self._read_plan(G_eff, float(waveform.dt), gate, windows, field, tol=tol, K=K, modes=modes)
+
+    def _full_plan(self, why):
+        """The plan of a read of every stored band and mode, an error of zero against the stored pack; ``why`` is its source."""
+        K_st = self.K
+        pm = ((self.meta.get("compression") or {}).get("channels") or {}).get("susc_field_basis")
+        M_st = self._mode_count(pm) if pm is not None else 0
+        return self._make_plan(self._windows(), K_st, 0.0, why, "full", M_st, M_st, 0.0, why if M_st else "no field channel", "full",
+                               PLAN_TOL, float("nan"))
+
+    def _mode_count(self, pm):
+        from .field import path_mode_count
+        return path_mode_count(self.arrays if self.n_windows == 1 else self._windows()[0][0].arrays, pm)
+
+    def _make_plan(self, windows, K, eK, src_K, how_K, M, M_st, eM, src_M, how_M, tol, floor):
+        from .planning import planned_bytes
+        read = stored = 0
+        for seg, _, _ in windows:
+            table = {k: (np.shape(v), np.dtype(v.dtype).itemsize) for k, v in seg.arrays.items()
+                     if k.startswith(("pos_", "susc_path"))}
+            r, st = planned_bytes(table, seg.meta, K, M)
+            read += r; stored += st
+        return ReadPlan(K=int(K), K_stored=int(self.K), band_error=float(eK), band_variance=src_K, bands_chosen=how_K,
+                        modes=int(M), modes_stored=int(M_st), mode_error=float(eM), mode_variance=src_M, modes_chosen=how_M,
+                        tol=float(tol), floor=float(floor), bytes_read=int(read), bytes_stored=int(stored))
+
+    def _read_plan(self, G_eff, dt_wf, gate, windows, field, *, tol, K, modes, any_field=False):
+        """The :class:`~dmipy_replay.replay.planning.ReadPlan` for the effective gradient ``G_eff`` (in the pack's frame) and
+        ``gate`` on their grid ``dt_wf``, over ``windows`` (``[(pack, t0, T), ...]``) and the resolved ``field`` term
+        (:meth:`plan`). ``any_field`` plans the modes for a field term that is not resolved yet (the primitives of an
+        acquisition, whose tissue and scanner come later).
+
+        The modes are planned at the pack's certified field scale (``field_envelope``: the largest ``B0`` and ``chi``) when it
+        states one, so the count depends on the acquisition's gate and the pack alone: a replay, its per-walker depth and the
+        primitives read the same modes, and the error stated bounds every field term the envelope allows. A pack that states
+        no envelope is planned at the term's own scale; for primitives, which have none, every mode is read."""
+        from .planning import band_tail, mode_tail, band_variance, fewest, floor_of
+        K_st = self.K
+        pm = ((self.meta.get("compression") or {}).get("channels") or {}).get("susc_field_basis")
+        M_st = self._mode_count(pm) if pm is not None else 0
+        if tol is None and K is None and modes is None:
+            return self._full_plan("a full read: every stored band and mode (tol=None)")
+        floor = floor_of(self.meta, self.n_walkers)
+        tol_eff = PLAN_TOL if tol is None else float(tol)
+        limit = tol_eff * floor
+        wins = [(T_s, t0) for _, t0, T_s in windows]
+        # ---- the bands
+        if K is not None and not 0 <= int(K) <= K_st:
+            raise ValueError(f"K = {K} is outside 0 .. {K_st}, the bands this pack stores")
+        if K is not None and int(K) == K_st or (K is None and tol is None):
+            Kp, eK, src_K, how_K = K_st, 0.0, "all stored bands: a full read of them", ("explicit" if K is not None else "full")
+        else:
+            var, src_K = band_variance(self.meta, K_st, self.T_window, self.diffusivity)
+            from .compression import band_phase_variances
+            beyond = 0.0                               # the bands never stored, at the free bridge's variance (closed form)
+            for T_w, t0_w in wins:
+                pb, total = band_phase_variances(np.asarray(G_eff, np.float64), float(dt_wf), float(T_w), K_st, float(self.diffusivity), t0=t0_w)
+                beyond = beyond + 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)
+            tail = (band_tail(G_eff, dt_wf, wins, var) + np.asarray(beyond).reshape(-1, 1)).max(axis=0)
+            if K is None:
+                Kp, eK = fewest(tail, range(K_st + 1), limit); how_K = "planned"
+            else:
+                Kp, eK, how_K = int(K), float(tail[int(K)]), "explicit"
+        # ---- the modes
+        env = self.field_envelope
+        if not (field.active or any_field):
+            scale = None
+        elif env is not None:
+            scale = (env["B0_max"], env["chi_max"])
+        elif field.active:
+            scale = (field.B0, abs(field.chi_iso) + abs(field.chi_aniso))
+        else:
+            scale = False
+        if M_st == 0:
+            if field.active:
+                raise ValueError(f"pack {self.meta.get('id')!r} declares its susceptibility field present and this replay has a "
+                                 "field term, but the pack holds no field channel (C3) here")
+            Mp, eM, src_M, how_M = 0, 0.0, "no field channel", "planned"
+        elif scale is None:
+            Mp, eM, src_M, how_M = 0, 0.0, "no field term: no mode is read", "planned"
+        elif scale is False:
+            Mp, eM, src_M, how_M = M_st, 0.0, "no certified field scale stated: every stored mode", "full"
+        elif (modes is not None and int(modes) == M_st) or (modes is None and tol is None):
+            Mp, eM, src_M, how_M = M_st, 0.0, "all stored modes: a full read of them", ("explicit" if modes is not None else "full")
+        else:
+            if modes is not None and not 0 <= int(modes) <= M_st:
+                raise ValueError(f"modes = {modes} is outside 0 .. {M_st}, the field modes this pack stores")
+            var, src_M = self._mode_variance(windows[0][0], pm)
+            tail = mode_tail(gate, dt_wf, wins, M_st, var, scale[0], scale[1])
+            if modes is None:
+                Mp, eM = fewest(tail, range(M_st + 1), limit); how_M = "planned"
+            else:
+                Mp, eM, how_M = int(modes), float(tail[int(modes)]), "explicit"
+        return self._make_plan(windows, Kp, eK, src_K, how_K, Mp, M_st, eM, src_M, how_M, tol_eff, floor)
+
+    def _mode_variance(self, seg, pm):
+        """``((K_f,) variance summed over the channels, source)`` of the field modes a plan weighs: the header's record, else
+        measured on a pilot of ``seg``'s walkers (:func:`~dmipy_replay.replay.planning.pilot_size`) and held in the pack's decoded
+        cache beside the modes it was measured on. A pack that stores no mode is refused by name."""
+        from .planning import stored_mode_variance, pilot_size
+        from .compression import walker_rows
+        stored = stored_mode_variance(self.meta)
+        if stored is not None:
+            return stored
+        n_p, why = pilot_size(self.meta, self.n_walkers)
+
+        def measure():
+            return _measured_mode_variance(walker_rows(seg.arrays, 0, n_p), pm)
+        cache = self.arrays.decoded
+        tensors = {k: v for k, v in seg.arrays.items() if k.startswith("susc_path")}
+        return cache.get("mode_variance", (n_p, json.dumps(pm, sort_keys=True, default=str)), tensors, measure), why
 
     def _select(self, compartment, ew, norm, w, ch, n_w):
         """Restrict the ensemble mean to ``compartment`` (a pool id or a walker mask)."""
@@ -1238,25 +1503,45 @@ class ReplayPack:
         checked against and what a prefix and a rewindowed pack keep."""
         return float(self.K) / (2.0 * float(self.windows["T"]))
 
+    @property
+    def truncation_budget(self):
+        """What a waveform may cost this pack in band truncation (:func:`truncation_budget`): ``dict(cap, cap_source,
+        other_terms, budget)``. The cap is the pack's ``fidelity.target_floor``; a pack that states none is held to its
+        Monte-Carlo floor, ``fidelity.floor_max`` or ``1 / sqrt(n_walkers)`` where the certificate states none."""
+        fid = self.meta.get("fidelity") or {}
+        if fid.get("floor_max"):
+            floor, src = float(fid["floor_max"]), "fidelity.floor_max"
+        else:
+            floor, src = 1.0 / np.sqrt(float(self.n_walkers)), "1/sqrt(n_walkers)"
+        return truncation_budget(self.meta, floor=floor, floor_source=src)
+
     def waveform_band(self, waveform, *, tol=None):
         """The temporal band ``waveform`` needs on this pack, as ``(hz, bands, err)``: the fewest sine bands whose
-        dropped phase moves the signal by no more than ``tol`` on every measurement, stated as the frequency
+        dropped phase costs the signal no more than ``tol`` on every measurement, stated as the frequency
         ``bands / (2 T)`` beside the pack's :attr:`temporal_bandwidth_hz` (#277).
 
         The gradient phase of a walker is the waveform's projection on the bridge basis contracted with the
         walker's bands (:func:`~dmipy_replay.replay.compression.band_projection`); the bands beyond the pack's
-        ``K`` are not stored, so the phase they would carry is lost silently. For a free path the bridge bands
-        are independent with the bridge covariance's eigenvalues ``2 D T^2 / (pi k)^2``
-        (:func:`~dmipy_replay.replay.compression.band_variances`), the tail every restricted walk shares at short times,
-        so the dropped phase variance per measurement is ``gamma^2 sum_{k > K} sum_d W_{m,k,d}^2 var_k`` at the walk's
-        diffusivity (the whole bridge's closed form less the retained bands, :func:`~dmipy_replay.replay.compression.
-        band_phase_variances`), and a dropped independent phase under-attenuates the magnitude by half of it. ``tol`` defaults to the pack's certified Monte-Carlo
-        floor, the unit of every other error the certificate states; a pack whose certificate states no floor
-        (walkers that never moved) is held to the largest floor its ``n_walkers`` could have, ``1 / sqrt(n)``.
-        The band is judged over the stretch the waveform spans (:meth:`_span`): the windows its duration reaches
-        on a pack stored in windows (RPK.md 4.3), the window on a one-window pack, so a short acquisition on a long
-        walk costs the projection of its own duration, not the walk's. The bands are sought up to
-        :data:`CONTINUOUS_BAND_CAP` times the pack's; a waveform beyond that returns ``inf``.
+        ``K`` are not stored, so the phase they would carry is lost silently. The cost of dropping bands ``j+1...`` is
+        bounded by half the phase variance they carry: a dropped phase ``phi`` with a symmetric law moves the signal
+        by ``|S_j| (1 - <e^{i phi}>) <= phi variance / 2`` for ``|S_j| <= 1``, so ``err[j] = max over measurements of
+        gamma^2 sum_{k > j} sum_d W_{m,k,d}^2 var_k / 2`` is the estimate, an upper bound for any substrate (the
+        retained signal is at most 1) and no sharper. ``var_k`` is the free bridge's band variance at the pack's
+        diffusivity, ``2 D T^2 / (pi k)^2`` (:func:`~dmipy_replay.replay.compression.band_variances`), and the sum over
+        ``k > j`` is the whole bridge's closed form less the retained bands
+        (:func:`~dmipy_replay.replay.compression.band_phase_variances`), so it runs to infinity, not to a grid. Free
+        diffusion's bands bound every restricted walk's from above: measured on the 20,000-walker cylinder masters
+        (2, 5 and 10 um diameter, 100 ms) the variance of every band above k = 100 is 0.43 to 0.97 of the free value
+        (and 1.00 on free water), and the tail's correlation with the retained phase is at most 0.04.
+
+        ``tol`` defaults to the pack's truncation budget (:func:`truncation_budget`): its stated numerical cap
+        (``fidelity.target_floor``) less its other certified terms, so a waveform within the band costs the pack no more
+        than its cap in total; a pack that states no cap is held to its Monte-Carlo floor (``fidelity.floor_max``,
+        ``1 / sqrt(n_walkers)`` where the certificate states none). The band is judged over the stretch the waveform
+        spans (:meth:`_span`): the windows its duration reaches on a pack stored in windows (RPK.md 4.3), the window on
+        a one-window pack, so a short acquisition on a long walk costs the projection of its own duration, not the
+        walk's. The bands are sought up to :data:`CONTINUOUS_BAND_CAP` times the pack's; a waveform beyond that returns
+        ``inf``.
         """
         from .compression import band_phase_variances
         waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
@@ -1265,7 +1550,7 @@ class ReplayPack:
         if D is None:
             raise ValueError("the pack records no diffusivity, so the band a waveform needs cannot be judged")
         if tol is None:
-            tol = float(self.meta.get("fidelity", {}).get("floor_max") or 0.0) or 1.0 / np.sqrt(float(self.n_walkers))
+            tol = self.truncation_budget["budget"]
         G = np.asarray(waveform.G_eff, np.float64)
         K_have = self.K * windows
         K_try = max(64, 2 * K_have)
@@ -1305,13 +1590,15 @@ class ReplayPack:
         T, windows = self._span(_duration(waveform))
         if bands <= self.K * windows:
             return
+        b = self.truncation_budget
         need = (f"more than {CONTINUOUS_BAND_CAP * self.K * windows / (2.0 * T):.4g} Hz over the {T * 1e3:.4g} ms it spans"
                 if not np.isfinite(hz) else f"{hz:.4g} Hz ({bands} bands over the {T * 1e3:.4g} ms it spans)")
         raise ValueError(f"the waveform's gradient reaches beyond this pack's temporal band: it needs {need} and the "
                          f"pack resolves {self.temporal_bandwidth_hz:.4g} Hz (K = {self.K} bands over {float(self.windows['T']) * 1e3:.4g} ms), "
-                         f"which would drop {err:.2e} of the signal into phase the pack does not carry. Build a pack at "
-                         f"this band or above (build_replay_pack(temporal_bandwidth_hz=...)), or replay a waveform "
-                         f"within this one")
+                         f"which would drop up to {err:.2e} of the signal into phase the pack does not carry, against the "
+                         f"{b['budget']:.2e} it may cost (its cap {b['cap']:.2e} from {b['cap_source']} less {b['other_terms']:.2e} "
+                         f"of other certified terms). Build a pack at this band or above "
+                         f"(build_replay_pack(temporal_bandwidth_hz=...)), or replay a waveform within this one")
 
     @property
     def digest(self):
@@ -1379,12 +1666,13 @@ class ReplayPack:
         array must never be handed to a band-basis contraction.  Raises on a pre-layout pack
         rather than guessing: see compression.read_position_coeffs.
 
-        Stacked from the per-axis tensors once; a pack's arrays do not change after loading, and
-        ``K``, ``n_walkers`` and ``n_coeffs`` all read this block.
+        Decoded from the per-axis tensors once for the whole pack (a pack's arrays do not change after loading);
+        a reader bounded in memory decodes walker ranges instead (:meth:`walkers`). ``K``, ``n_walkers`` and
+        ``n_coeffs`` read the stored shapes, not this block.
         """
         from .compression import read_position_coeffs, require_position_method
         require_position_method(self.method)
-        return read_position_coeffs(self.arrays, dtype=np.float32)
+        return read_position_coeffs(self.arrays, dtype=np.float32, cached=False)
 
     @property
     def r0(self):
@@ -1392,17 +1680,17 @@ class ReplayPack:
 
         The position codec keeps ``r(0)`` as an exact entry rather than a reconstructed band, so this is the
         stored value to float32 (of order 0.1 nm on a millimetre coordinate), identical at every ``K``, and it
-        costs one slice of the coefficient block -- no path is decoded. It is what partitions a walk into voxels
-        (RPH.md: ``voxel = floor((r0 - origin) / voxel_size)``), which is why it must not depend on the band.
+        costs the first column of the endpoint tensors -- no band is decoded. It is what partitions a walk into
+        voxels (RPH.md: ``voxel = floor((r0 - origin) / voxel_size)``), which is why it must not depend on the band.
         """
-        from .compression import read_position_coeffs, require_position_method
+        from .compression import position_starts, require_position_method
         require_position_method(self.method)
-        return np.ascontiguousarray(read_position_coeffs(self.arrays, dtype=np.float64)[:, 0, :])
+        return np.ascontiguousarray(position_starts(self.arrays))
 
     @property
     def spin_weights(self):
         w = self.arrays.get("spin_weights")
-        return np.ones(self.position_coeffs.shape[0]) if w is None else w
+        return np.ones(self.n_walkers) if w is None else w
 
     @property
     def boundary_local_time(self):
@@ -1437,7 +1725,7 @@ class ReplayPack:
         Declared and stored are cross-checked so they cannot drift apart.
         """
         k = int(self.meta.get("compression", {}).get("K", -1))
-        stored = int(self.position_coeffs.shape[1])
+        stored = self.n_coeffs
         if k < 0:
             raise ValueError("pack declares no compression.K; refusing to infer it from the "
                              "array width, which counts the two endpoints as well")
@@ -1448,12 +1736,24 @@ class ReplayPack:
 
     @property
     def n_coeffs(self):
-        """Stored coefficients per axis, ``K + 2``."""
-        return int(self.position_coeffs.shape[1])
+        """Stored coefficients per axis, ``K + 2``, from the stored shapes."""
+        from .compression import position_shape
+        return position_shape(self.arrays)[1]
 
     @property
     def n_walkers(self):
-        return int(self.position_coeffs.shape[0])
+        """The walkers the pack holds, from the stored shapes."""
+        from .compression import position_shape
+        return position_shape(self.arrays)[0]
+
+    def walkers(self, start, stop):
+        """Walkers ``start:stop`` as a pack of their own (:func:`~dmipy_replay.replay.compression.walker_rows`): the same
+        metadata, ``walk_params.n_walkers`` theirs, every walker-leading tensor a view of this pack's rows and the
+        tables whole. A per-walker quantity read from it is that of the same walkers read from the whole pack."""
+        from .compression import position_shape, walker_rows
+        arrays = walker_rows(self.arrays, start, stop)
+        wp = dict(self.meta.get("walk_params") or {}, n_walkers=position_shape(arrays)[0])
+        return type(self)(arrays, dict(self.meta, walk_params=wp), source=self.source)
 
     @property
     def block(self):
@@ -1489,6 +1789,15 @@ class ReplayPack:
     replay_envelope = property(lambda self: self.meta.get("replay_envelope"))
     provenance = property(lambda self: self.meta.get("provenance"))
 
+
+def _measured_mode_variance(arrays, pm):
+    """``(K_f,)``: the mean square of each field mode over the walkers of ``arrays`` (a pack's tensors, or a pilot's rows of
+    them), summed over the channels -- the variance a plan weighs the modes with when the header states none."""
+    from .field import susc_path_coeffs
+    C = np.asarray(susc_path_coeffs(arrays, pm)[0], np.float64)                                   # (n, n_ch, K_f)
+    return (C ** 2).mean(axis=0).sum(axis=0)
+
+
 def _as_distribution(orientation):
     """``orientation=`` as a distribution of poses, or None when it names a single pose.
 
@@ -1501,10 +1810,12 @@ def _as_distribution(orientation):
                               "pose expansion, which this release does not carry yet; give one pose (a 3x3 rotation or "
                               "the lab direction of the substrate's axis)")
 
+
 def _duration(waveform):
     """An acquisition's duration in seconds from the walk's start: its last gradient sample's time."""
     waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
     return (int(np.asarray(waveform.G_eff).shape[1]) - 1) * float(waveform.dt)
+
 
 def _echo_blocks(waveform, dt_pack):
     """The block-end indices of a multi-echo readout on the walk's clock, or ``None`` when the sequence is read at its last
@@ -1515,6 +1826,7 @@ def _echo_blocks(waveform, dt_pack):
     return [int(round(i * float(waveform.dt) / float(dt_pack))) for i in readout]
 
 _AXIS_MAPS = {}
+
 
 def compile_scheme(G, dt, K, gyromagnetic_ratio=GAMMA, *, T=None, method=None):
     """Compile an acquisition into its temporal-basis projection ``W``: the exact integral of the waveform
@@ -1536,6 +1848,29 @@ def compile_scheme(G, dt, K, gyromagnetic_ratio=GAMMA, *, T=None, method=None):
     W = band_projection(G, dt, T, int(K))
     return (gyromagnetic_ratio * W).reshape(W.shape[0], (int(K) + 2) * W.shape[2]).T
 
+
+
+NUMERICAL_TERMS = ("err_quadrature", "err_quantisation", "err_quadrature_surface", "err_rounding", "err_quadrature_field",
+                   "err_field_read", "err_quantisation_field", "err_surface", "err_reprojection")
+
+
+def truncation_budget(meta, *, floor, floor_source):
+    """The truncation error a waveform may cost this pack, as ``dict(cap, cap_source, other_terms, budget)``.
+
+    A pack that states its numerical cap (``fidelity.target_floor``, the error budget it was built to) is held to it:
+    ``budget = cap - other_terms``, with ``other_terms`` the sum of its certified non-truncation rows
+    (:data:`NUMERICAL_TERMS`) or ``err_max - err_truncation`` where that is larger, so a waveform the check admits
+    costs the pack at most its cap in total. A pack that states none is held to ``floor`` (named by ``floor_source``),
+    the Monte-Carlo noise it is read through; its ``other_terms`` are then 0 and ``budget = floor``."""
+    fid = meta.get("fidelity") or {}
+    if fid.get("target_floor") is None:
+        return dict(cap=float(floor), cap_source=str(floor_source), other_terms=0.0, budget=float(floor))
+    cap = float(fid["target_floor"])
+    named = sum(float(fid[k]) for k in NUMERICAL_TERMS if fid.get(k) is not None)
+    left_over = (float(fid["err_max"]) - float(fid.get("err_truncation") or 0.0)) if fid.get("err_max") is not None else 0.0
+    other = max(named, left_over)
+    return dict(cap=cap, cap_source="fidelity.target_floor", other_terms=other, budget=max(cap - other, 0.0))
+
 CONTINUOUS_BAND_CAP = 64
 
 TORCH_GROUPS = 128
@@ -1546,6 +1881,7 @@ SHELL_SERIES_TOL = 1e-14
 
 SHELL_SERIES_MAX_PHASE = 10.0
 
+
 def _container_of(ranges):
     """The builder's band-container knob (``((upto, bits), ...)``, or ``None`` for the float container) from the
     ranges a pack's metadata records (``[{"bands": [k0, k1], "bits": b}, ...]``)."""
@@ -1553,12 +1889,14 @@ def _container_of(ranges):
         return None
     return tuple((None if i == len(ranges) - 1 else int(r["bands"][1]), int(r["bits"])) for i, r in enumerate(ranges))
 
+
 def _compile_continuous(X, dt_wf, K, T, t0, gyromagnetic_ratio=GAMMA):
     """``(K + 2, n)``: ``gamma`` times the projection (:func:`~dmipy_replay.replay.compression.band_projection`) of each of
     the ``n`` courses ``X`` ``(n, n_wf, 1)`` on its own grid ``dt_wf`` onto the bands of the window of ``T`` seconds
     starting at ``t0`` -- what the pose routes contract one axis of the coefficients against."""
     from .compression import band_projection
     return gyromagnetic_ratio * band_projection(np.asarray(X, np.float64), float(dt_wf), float(T), int(K), t0=t0)[:, :, 0].T
+
 
 def _band_phase(P, W=None):
     """``(n_w, n_meas)`` gradient phase of every walker under the prepared acquisition ``P``: each window's stored
@@ -1569,21 +1907,30 @@ def _band_phase(P, W=None):
     :meth:`ReplayPack.replay`, :meth:`ReplayPack.walker_signals` and :meth:`ReplayPack.walker_phases` -- and
     :func:`~dmipy_replay.replay.study.walker_primitives` read it, so the per-walker depth and the ensemble depth are
     the same number by construction rather than by agreement (dmipy-sim#484). ``W`` replaces the projection with a
-    caller's own per-position weights (:meth:`ReplayPack._check_weights`, single-window only).
+    caller's own per-position weights (:meth:`ReplayPack._check_weights`, single-window only). An acquisition whose
+    effective gradient is zero throughout (a free-induction decay, a gradient-free echo) has the phase zero and reads no
+    coefficient. With a plan (``P["K_use"]``) only the lowest ``K_use`` bands of each window are decoded and projected:
+    bit for bit the contraction of the full decode cut at ``K_use``.
     """
     from .compression import read_position_coeffs, band_projection
     n_w = P["n_w"]
+    if W is None and not np.any(P["G_eff_wf"]):
+        return np.zeros((n_w, P["G_eff_wf"].shape[0]))            # no gradient: every walker's phase is zero, no band is read
     phi = None
+    K_use = P.get("K_use")
     for seg, t0, T_s in P["windows"]:
         if W is not None:
             W_s = W
+            C = read_position_coeffs(seg.arrays, dtype=np.float64)
         else:
-            Wp = band_projection(P["G_eff_wf"], P["dt_wf"], T_s, seg.K, t0=t0)
+            K_s = seg.K if K_use is None else K_use
+            Wp = band_projection(P["G_eff_wf"], P["dt_wf"], T_s, K_s, t0=t0)
             W_s = (GAMMA * Wp).reshape(Wp.shape[0], -1).T
-        C = read_position_coeffs(seg.arrays, dtype=np.float64)
-        phi_s = C.reshape(n_w, seg.n_coeffs * 3) @ W_s
+            C = read_position_coeffs(seg.arrays, dtype=np.float64, bands=K_use)           # the planned prefix: K_use + 2 entries
+        phi_s = C.reshape(n_w, C.shape[1] * 3) @ W_s
         phi = phi_s if phi is None else phi + phi_s
     return phi
+
 
 def _path_field_channels(P, waveform):
     """``(Psi, names)``: the C3 path channel's gated field integrals per walker under the prepared acquisition,
@@ -1594,14 +1941,17 @@ def _path_field_channels(P, waveform):
     pm = P["ch"]["susc_field_basis"]
     Psi = names = None
     for seg, t0, T_s in P["windows"]:
-        Psi_s, names = path_field_integral(seg.arrays, pm, waveform, T_s, t0=t0, n_w=P["n_w"])
+        Psi_s, names = path_field_integral(seg.arrays, pm, waveform, T_s, t0=t0, n_w=P["n_w"], modes=P.get("M_use"))
         Psi = Psi_s if Psi is None else Psi + Psi_s
     return Psi, names
 
+
 def _has_aniso(grid_meta, names):
-    """Whether the pack's field channels carry the anisotropic basis: the grid meta says so AND the channel names
-    hold it."""
-    return bool((grid_meta or {}).get("has_aniso")) and names is not None and "aniso_G_xx" in names
+    """Whether the pack's field channels carry the anisotropic basis: the channel names hold it, and the field
+    record, where the pack carries one, says so too."""
+    held = names is not None and "aniso_G_xx" in names
+    return held and (grid_meta is None or bool(grid_meta.get("has_aniso")))
+
 
 def _signal_factor(phi, voxel):
     """``E`` of a replay from the walkers' phases: ``exp(i phi)`` times the voxel's factor per measurement
@@ -1609,6 +1959,7 @@ def _signal_factor(phi, voxel):
     the spoiler for an unbalanced one, dmipy-sim#375). Every per-walker route forms ``E`` here, so the weighted
     ensemble mean of any of them is :meth:`ReplayPack.replay`."""
     return np.exp(1j * np.asarray(phi)) * np.asarray(voxel, np.float64)[None, :]
+
 
 def _gated_contact(windows, gate_wf, j, rho_over_D, chan_meta, *, parallel=False):
     """The gated contact term ``(rho / D) int chi dB`` of window ``j`` of a prepared replay: the gate on its own grid
@@ -1618,6 +1969,7 @@ def _gated_contact(windows, gate_wf, j, rho_over_D, chan_meta, *, parallel=False
     chi, dt_chi = gate_wf
     gate = np.clip(1.0 - chi, 0.0, None) if parallel else chi
     return surface_logweight(seg.arrays, rho_over_D, chan_meta, gate, dt_chi, t0=t0)
+
 
 def surface_logweight(arrays, rho2_over_D, chan_meta=None, gate=None, dt_gate=None, *, t0=0.0):
     """Per-walker surface log-weight ``(rho2/D) int chi(t) dB(t)`` from the C2 channel, ``chi`` the ``gate`` on its own
@@ -1644,6 +1996,7 @@ def surface_logweight(arrays, rho2_over_D, chan_meta=None, gate=None, dt_gate=No
     meta.setdefault("K", _cx_bands_K(arrays, meta))
     return surface_logweight_bridge(arrays, meta, rho2_over_D, gate, dt_gate, t0=t0)   # the bridge contracted, never decoded
 
+
 def replay_signal(pack, W, *, rho2_over_D=0.0, gate=None, dt_gate=None, complex_signal=False):
     """Replay a compiled scheme ``W`` (from :func:`compile_scheme`) against ``pack`` (a :class:`ReplayPack`
     or a plain arrays dict). Returns ``E`` per measurement (magnitude unless ``complex_signal``).
@@ -1669,6 +2022,7 @@ def replay_signal(pack, W, *, rho2_over_D=0.0, gate=None, dt_gate=None, complex_
               if isinstance(pack, ReplayPack) else None)
         surface_logw = surface_logweight(a, rho2_over_D, cm, gate, dt_gate)
     return replay_coefficients(C, w0, W, surface_logw=surface_logw, complex_signal=complex_signal)
+
 
 def replay_coefficients(position_coeffs, spin_weights, W, *, surface_logw=None, complex_signal=False):
     """The compiled replay on host arrays: ``E = <w_eff exp(i C W)> / <w>`` for the position coefficients

@@ -44,6 +44,7 @@ POSITION_METHOD = "bridge_dst"          # the only C0 representation: start, dis
 
 ALL_METHODS = (POSITION_METHOD,)
 
+
 def require_position_method(method):
     """Raise unless ``method`` is the one C0 representation this build reads.
 
@@ -67,6 +68,7 @@ def require_position_method(method):
 
 _F16, _F32 = 2, 4
 
+
 def cosine_band_scale(K, T):
     """Per band ``k = 1..K`` the factor taking the cosine projection of a path's increments, ``c_k = int cos(pi k t /
     T) dx(t)``, to the bridge's band on the continuous basis, ``beta_k = sqrt(2 T) / (pi k) c_k``, ``(K,)`` float64.
@@ -78,6 +80,7 @@ def cosine_band_scale(K, T):
     k = np.arange(1, int(K) + 1, dtype=np.float64)
     return np.sqrt(2.0 * float(T)) / (np.pi * k)
 
+
 def cosine_mode_scale(K, T):
     """Per mode ``k = 0..K`` the factor taking the accumulated projection ``sum cos(pi k t / T) b dt`` to the mode on the
     orthonormal cosine basis of the window, ``c_k = int e_k b dt`` with ``e_0 = T^-1/2`` and ``e_k = sqrt(2 / T)
@@ -85,6 +88,7 @@ def cosine_mode_scale(K, T):
     out = np.full(int(K) + 1, np.sqrt(2.0 / float(T)))
     out[0] = 1.0 / np.sqrt(float(T))
     return out
+
 
 def cosine_projection(G, dt_wf, T, K, *, t0=None):
     """THE projection of a sample-and-hold course on a window's orthonormal cosine modes, ``(n_meas, K, n_c)``: ``g_k =
@@ -106,6 +110,7 @@ def cosine_projection(G, dt_wf, T, K, *, t0=None):
         out[:, 1:, :] = np.einsum("mnc,nk->mkc", Gl, W)
     return out
 
+
 def band_variances(K, T, D):
     """The free bridge's band variances on the continuous basis, ``(K,)``: the eigenvalues of the bridge covariance
     ``2 D (min(s, t) - s t / T)`` per axis, ``2 D T^2 / (pi k)^2`` -- the limit as ``dt -> 0`` of the discrete
@@ -115,6 +120,7 @@ def band_variances(K, T, D):
     return 2.0 * float(D) * float(T) ** 2 / (np.pi * k) ** 2
 
 _PROJECTION_CHUNK = 1 << 25
+
 
 def _window_pieces(G, dt_wf, T, t0):
     """The sample-and-hold pieces of ``G`` ``(n_meas, n_wf, n_c)`` within the window ``[t0, t0 + T]``: ``(G_live,
@@ -132,12 +138,14 @@ def _window_pieces(G, dt_wf, T, t0):
     live = b > a
     return G[:, live, :], a[live], b[live], live
 
+
 def _piece_weights(a, b, T, k):
     """``(n_pieces, len(k))``: the integral of ``s_k(t)`` over each piece ``[a, b]`` of the window, ``sqrt(2 / T) (cos(omega
     a) - cos(omega b)) / omega``, written ``2 sin(omega (a + b) / 2) sin(omega (b - a) / 2) / omega`` (no cancellation)."""
     om = np.pi * np.asarray(k, np.float64) / float(T)
     mid, half = 0.5 * (a + b), 0.5 * (b - a)
     return np.sqrt(2.0 / float(T)) * 2.0 * np.sin(np.outer(mid, om)) * np.sin(np.outer(half, om)) / om[None, :]
+
 
 def band_projection(G, dt_wf, T, K, *, t0=None):
     """THE projection of a waveform on a pack's bands, ``(n_meas, K + 2, n_c)``: ``M0 = int G``, ``M1 =
@@ -160,12 +168,18 @@ def band_projection(G, dt_wf, T, K, *, t0=None):
         out[:, 1 + k0:1 + k0 + k.size, :] = np.einsum("mnc,nk->mkc", Gl, _piece_weights(a, b, T, k))
     return out
 
-def segment_projection(segments, T, K, *, t0=None):
+
+def segment_projection(segments, T, K, *, t0=None, shapes=None):
     """THE projection of time segments on a pack's bands, ``(n_seg, K + 2)``: per segment ``[a, b]`` (s, on the walk's
     clock) its indicator's ``M0``, ``M1`` and ``W_k`` over the window ``[t0, t0 + T]`` (the segment clipped to it), in
     the closed form :func:`band_projection` sums piece by piece (:func:`_piece_weights`) -- what that projection gives a
     waveform equal to 1 on the segment and 0 elsewhere, wherever the segment's edges fall. A walk stored as ``C =
-    [x(0), x(T) - x(0), beta_1..beta_K]`` has ``int_a^b x dt = sum C W`` per axis."""
+    [x(0), x(T) - x(0), beta_1..beta_K]`` has ``int_a^b x dt = sum C W`` per axis.
+
+    ``shapes`` (one entry per segment: ``None`` for the indicator, else a 1-D array of ``n`` values) weights the
+    segment by a temporal shape ``psi`` held on ``n`` equal cells of ``[a, b]`` (the sample-and-hold waveform
+    :func:`band_projection` reads): the row is ``sum_j psi_j`` times the cell ``j``'s indicator row, so the projection
+    of ``psi 1_[a,b]`` is exact for any ``psi`` that is piecewise constant on the cells, with no quadrature error."""
     T = float(T)
     start = 0.0 if t0 is None else float(t0)
     S = np.asarray(segments, np.float64).reshape(-1, 2)
@@ -176,7 +190,18 @@ def segment_projection(segments, T, K, *, t0=None):
     out[:, 1] = (b * b - a * a) / (2.0 * T)
     if int(K):
         out[:, 2:] = _piece_weights(a, b, T, np.arange(1, int(K) + 1))
+    if shapes is not None:
+        if len(shapes) != S.shape[0]:
+            raise ValueError(f"shapes is one entry per segment ({S.shape[0]}); got {len(shapes)}")
+        for s, v in enumerate(shapes):
+            if v is None:
+                continue
+            v = np.asarray(v, np.float64).ravel()
+            edges = S[s, 0] + (S[s, 1] - S[s, 0]) * np.arange(v.size + 1) / v.size
+            edges[-1] = S[s, 1]
+            out[s] = v @ segment_projection(np.stack([edges[:-1], edges[1:]], axis=1), T, K, t0=t0)
     return out
+
 
 def band_projection_matrix(n_wf, dt_wf, T, K, *, t0=None):
     """``(K + 2, n_wf)``: :func:`band_projection` as a matrix on a waveform's ``n_wf`` samples (one axis) -- column ``n``
@@ -191,6 +216,7 @@ def band_projection_matrix(n_wf, dt_wf, T, K, *, t0=None):
     if int(K):
         out[2:] = _piece_weights(a, b, T, np.arange(1, int(K) + 1)).T
     return out
+
 
 def bridge_phase_variance(G, dt_wf, T, D, *, t0=None):
     """``(n_meas,)``: the variance of ``int G . u dt`` over the window ``[t0, t0 + T]`` for the free bridge ``u`` of a
@@ -212,6 +238,7 @@ def bridge_phase_variance(G, dt_wf, T, D, *, t0=None):
     int_q = (L * (qa + qb) / 2.0).sum(axis=1)
     return 2.0 * float(D) * (int_q2 - int_q * int_q / T).sum(axis=1)
 
+
 def band_phase_variances(G, dt_wf, T, K, D, *, t0=None):
     """``(per_band (n_meas, K), total (n_meas,))``: the phase variance (rad^2) each of the lowest ``K`` bands carries for
     the waveform ``G`` on a free walk at ``D`` over the window ``T`` -- ``gamma^2 sum_c W_kc^2 var_k`` with
@@ -222,6 +249,7 @@ def band_phase_variances(G, dt_wf, T, K, D, *, t0=None):
     W = band_projection(G, dt_wf, T, int(K), t0=t0)[:, 2:, :]
     pb = GAMMA ** 2 * (W ** 2).sum(axis=2) * band_variances(int(K), T, D)[None, :]
     return pb, GAMMA ** 2 * bridge_phase_variance(G, dt_wf, T, D, t0=t0)
+
 
 def rescale_bands(arrays, factor):
     """The arrays with every bridge band (positions and contact, any container, any window) multiplied by
@@ -251,6 +279,7 @@ NATIVE_BITS = (8, 16)
 
 MIN_BITS = 3
 
+
 def _band_ranges(container, K):
     """``[(k0, k1, bits), ...]`` covering bands ``0 .. K-1`` from a container: ``((upto, bits), ...)`` with ``upto``
     None the end, or the ``[{"bands": [k0, k1], "bits": b}, ...]`` a pack's metadata records and :func:`band_curve`
@@ -271,6 +300,7 @@ def _band_ranges(container, K):
         raise ValueError(f"band container covers bands up to {k0} of {K}; end it with (None, bits)")
     return out
 
+
 def range_name(key, i, bits):
     """The tensor name of band range ``i`` at ``bits``: ``{key}_b{i}`` for a native depth, ``{key}_b{i}u{bits}`` for a
     bit-packed one -- the depth is part of the name so a reader without the metadata can unpack."""
@@ -280,26 +310,70 @@ _RANGE_RE = r"_b(\d+)(?:u(\d+))?"
 
 _PACK_ROWS = 1 << 15
 
+
 def unpack_bits(packed, bits, m):
     """The ``m`` unsigned integers of ``bits`` each per row of ``packed`` ``(N, nbytes)``: the inverse of
-    :func:`pack_bits`, ``(N, m)`` ``uint32``."""
+    :func:`pack_bits`, ``(N, m)`` ``uint32``. Eight values of ``bits`` bits fill exactly ``bits`` bytes, so value ``j`` of
+    every group of eight sits at the same bytes and bit offset: it is read from at most four byte columns of the
+    ``(N, groups, bits)`` view with a shift and a mask, one strided pass per ``j`` and no bit is expanded to a byte."""
+    if not 1 <= bits <= 25:
+        raise ValueError(f"unpack_bits reads depths of 1 to 25 bits; got {bits}")
     packed = np.asarray(packed)
-    w = (1 << np.arange(bits - 1, -1, -1)).astype(np.uint32)
+    n_g = -(-m // 8)
+    mask = np.uint32((1 << bits) - 1)
     out = np.empty((packed.shape[0], m), np.uint32)
     for i in range(0, packed.shape[0], _PACK_ROWS):
-        b = np.unpackbits(packed[i:i + _PACK_ROWS], axis=1, count=m * bits).reshape(-1, m, bits)
-        out[i:i + _PACK_ROWS] = (b.astype(np.uint32) * w).sum(axis=2, dtype=np.uint32)
+        rows = packed[i:i + _PACK_ROWS]
+        pad = np.zeros((rows.shape[0], n_g * bits), np.uint8)
+        pad[:, :min(rows.shape[1], pad.shape[1])] = rows[:, :pad.shape[1]]
+        g = pad.reshape(rows.shape[0], n_g, bits)
+        for j in range(min(8, m)):
+            c0, off = (j * bits) >> 3, (j * bits) & 7
+            n_b = (off + bits + 7) >> 3
+            acc = g[:, :, c0].astype(np.uint32)
+            for k in range(1, n_b):
+                acc <<= 8
+                acc |= g[:, :, c0 + k]
+            acc >>= np.uint32(8 * n_b - off - bits)
+            acc &= mask
+            cols = out[i:i + _PACK_ROWS, j::8]
+            cols[...] = acc[:, :cols.shape[1]]
     return out
 
-def _load_range(t, bits, m):
-    """The integer band values ``(N, m[, n_axes])`` of a stored tensor: :func:`_store_range` inverted."""
+
+def _unpack_from(t, bits, start, m):
+    """The ``m`` unsigned integers of ``bits`` each that follow value ``start`` in every row of the bit-packed ``t``
+    ``(N, nbytes)``, ``(N, m)`` ``uint32``. Eight values fill ``bits`` bytes exactly, so the read begins at the byte of the
+    group that holds ``start``, and the ``start`` values before it are never unpacked."""
+    s8 = start - start % 8
+    first = (s8 // 8) * bits
+    got = unpack_bits(np.asarray(t)[:, first:first + -(-(start - s8 + m) // 8) * bits], bits, start - s8 + m)
+    return got[:, start - s8:]
+
+
+def _load_range(t, bits, m, start=0):
+    """The integer band values ``(N, m[, n_axes])`` of a stored tensor (values ``start .. start + m - 1`` of its range):
+    :func:`_store_range` inverted."""
     t = np.asarray(t)
     if bits in NATIVE_BITS:
-        return t
+        return t[:, start:start + m] if (start or m != t.shape[1]) else t
     off = 1 << (bits - 1)
     if t.ndim == 2:
-        return unpack_bits(t, bits, m).astype(np.int32) - off
-    return np.stack([unpack_bits(t[..., a], bits, m).astype(np.int32) - off for a in range(t.shape[2])], axis=2)
+        return _unpack_from(t, bits, start, m).astype(np.int32) - off
+    return np.stack([_unpack_from(t[..., a], bits, start, m).astype(np.int32) - off for a in range(t.shape[2])], axis=2)
+
+
+def _range_values(t, bits, m, start=0):
+    """The integer band values of a stored range ``t`` (values ``start .. start + m - 1``) as float64 ``(N, m)`` (exact:
+    every integer of at most 16 bits is a float64), from the native ``int8`` / ``int16`` tensor or the bit-packed ``uint8``
+    rows -- :func:`_load_range` with the one conversion to float64 and the offset taken in place."""
+    t = np.asarray(t)
+    if bits in NATIVE_BITS:
+        return t[:, start:start + m].astype(np.float64)
+    q = _unpack_from(t, bits, start, m).astype(np.float64)
+    q -= 1 << (bits - 1)
+    return q
+
 
 def band_scales(arrays, scale_key, n_w):
     """The per-walker scale of every band, ``(N_w, K)`` or ``(N_w, n_axes, K)``: the block table indexed by each
@@ -310,6 +384,7 @@ def band_scales(arrays, scale_key, n_w):
     if table.shape[0] != 1:
         raise KeyError(f"{scale_key} holds {table.shape[0]} blocks but the pack carries no band_block")
     return np.broadcast_to(table[0], (int(n_w),) + table.shape[1:])
+
 
 def dequantise_bands(arrays, container, key, scale_key, dtype=np.float64):
     """The bands back as ``(N_w, K)`` or ``(N_w, K, n_axes)`` from :func:`quantise_bands`' tensors."""
@@ -328,6 +403,7 @@ DEVICES = ("auto", "numpy", "jax")
 
 CHUNK_BYTES = 1 << 30
 
+
 def bridge_basis(times, K, T):
     """The bridge's basis at the instants ``times`` (s from the window's start) of a window of ``T`` seconds:
     ``(S (K, n), tau (n,))``, ``S[k, n] = s_k(t_n) = sqrt(2 / T) sin(pi k t_n / T)`` and the chord's fraction ``tau =
@@ -336,6 +412,7 @@ def bridge_basis(times, K, T):
     tau = t / float(T)
     k = np.arange(1, int(K) + 1, dtype=np.float64)
     return np.sqrt(2.0 / float(T)) * np.sin(np.pi * np.outer(k, tau)), tau
+
 
 def bridge_at(C, times, T):
     """The function a stored bridge vector holds, at the instants ``times`` (s from the window's start): ``C`` is
@@ -349,11 +426,13 @@ def bridge_at(C, times, T):
         out = out + np.einsum("wk...,kn->wn...", C[:, 2:], S)
     return out
 
+
 def positions_at(arrays, meta, times, walkers=None):
     """Every walker's position at the instants ``times`` (s from the window's start) of a window of ``meta["T"]``
     seconds, ``(n_w, n, 3)`` float64, from the stored endpoints and bands (of the slice ``walkers`` when given)."""
     C = read_position_coeffs(arrays, dtype=np.float64)
     return bridge_at(C if walkers is None else C[walkers], times, float(meta["T"]))
+
 
 def local_time_at(arrays, meta, times, walkers=None):
     """The cumulative boundary local time ``B(t)`` (at ``rho2 / D = 1``, non-positive) of every walker at the instants
@@ -366,9 +445,11 @@ def local_time_at(arrays, meta, times, walkers=None):
     vec = np.concatenate([a[:, None], (e - a)[:, None], bridge_bands(arrays, meta)[sl]], axis=1)
     return bridge_at(vec, times, float(meta["T"]))
 
+
 def has_c2(arrays):
     """Whether the arrays carry the C2 bridge in either container."""
     return "blt_bridge_dst" in arrays or any(k.startswith("blt_b0") for k in arrays)
+
 
 def c2_bands_K(arrays, meta):
     """The number of C2 bands stored, from the metadata or the tensors."""
@@ -378,6 +459,7 @@ def c2_bands_K(arrays, meta):
         return int(np.asarray(arrays["blt_bridge_dst"]).shape[1])
     return int(np.asarray(arrays["blt_band_scale"]).shape[-1])
 
+
 def bridge_bands(arrays, meta, key="blt", scale_key="blt_band_scale", dtype=np.float64):
     """The C2 bands ``(N_w, K)`` from either container: the float tensor ``blt_bridge_dst`` or the integer ranges
     ``blt_b<i>`` with ``blt_band_scale`` (``meta["container"]``)."""
@@ -385,16 +467,26 @@ def bridge_bands(arrays, meta, key="blt", scale_key="blt_band_scale", dtype=np.f
         return np.asarray(arrays["blt_bridge_dst"], dtype)
     if meta.get("container") is None:
         raise KeyError("this pack's C2 channel is in the integer container but its metadata carries no 'container'")
-    return dequantise_bands(arrays, meta["container"], key, scale_key, dtype)
+    sel = (key, scale_key, np.dtype(dtype).str, repr(meta["container"]))
+    return _decoded_once(arrays, "bridge_bands", sel, (key, scale_key),
+                         lambda: dequantise_bands(arrays, meta["container"], key, scale_key, dtype))
 
 _EXCLUSIVE_COLUMN = "comp"          # the geometric axis: mutually exclusive, an int label
 
 OCCUPANCY_COLUMNS = ("comp", "bound")
 
+
 def occupancy_events(arrays, column):
     """A column's stored events as ``(start (N_w,), EventList)``: the label every walker holds at its first event
     (the window's start) and its changes after it (:class:`~dmipy_replay.coefficient_walk.EventList`); a static column
-    as ``(labels, None)``."""
+    as ``(labels, None)``. Of a pack's ``arrays`` (:class:`~dmipy_replay.replay.decoded.PackArrays`) the arrays are decoded
+    once per column and returned read-only (:func:`read_position_coeffs`)."""
+    name = column["name"]
+    return _decoded_once(arrays, "occupancy_events", (name, column["kind"]), (f"{name}_",),
+                         lambda: _occupancy_events(arrays, column))
+
+
+def _occupancy_events(arrays, column):
     from .events import EventList
     name = column["name"]
     if column["kind"] == "static":
@@ -412,6 +504,7 @@ def occupancy_events(arrays, column):
     counts = np.diff(off) - 1
     return lab[heads], EventList(np.concatenate([[0], np.cumsum(counts)]), t[mask], lab[mask])
 
+
 def decode_occupancy(arrays, meta):
     """-> ``{name: (start, events)}`` per column (:func:`occupancy_events`): the labels at the window's start and the
     changes after it; a static column's events are ``None``. A pack whose C1 metadata predates the column layout is
@@ -422,6 +515,7 @@ def decode_occupancy(arrays, meta):
             "revision of this reader. A pack is never converted: re-walk it with a conformant producer.")
     return {d["name"]: occupancy_events(arrays, d) for d in meta["columns"]}
 
+
 def occupancy_at(arrays, column, times):
     """The labels of every walker at each of ``times`` (s, on the walk's clock), ``(N_w, len(times))``: a column
     evaluated on a reader's instants (the dense oracle, the Bloch route's per-block reading) -- never a stored form."""
@@ -429,15 +523,18 @@ def occupancy_at(arrays, column, times):
     start, ev = occupancy_events(arrays, column)
     return events_at_instants(ev, start, times)
 
+
 def is_current_c1(meta):
     """True if a pack's C1 channel metadata is in the occupancy-column layout."""
     return isinstance(meta, dict) and "columns" in meta
+
 
 def has_c1(arrays):
     """Whether the arrays carry the C1 ``comp`` column in either form (events or the static label)."""
     return "comp_events_offsets" in arrays or "comp_static" in arrays
 
 POSITION_AXES = ("pos_x", "pos_y", "pos_z")
+
 
 def position_ranges(arrays, name):
     """``[(i, bits), ...]`` the band ranges stored under ``{name}_b<i>[u<bits>]``, in band order: the depth of a
@@ -449,6 +546,7 @@ def position_ranges(arrays, name):
             out.append((int(m.group(1)), int(m.group(2)) if m.group(2) else 8 * np.asarray(arrays[k]).dtype.itemsize))
     return sorted(out)
 
+
 def position_container(arrays):
     """The container the position tensors are in: ``"float"`` (``pos_x`` ...) or ``"bands"`` (``pos_x_ends`` ...)."""
     if POSITION_AXES[0] in arrays:
@@ -457,51 +555,184 @@ def position_container(arrays):
         return "bands"
     return None
 
+
 def has_axis_layout(arrays):
     return position_container(arrays) is not None
 
-def read_position_coeffs(arrays, axes=None, dtype=np.float64):
-    """Coefficients as (n_w, K, n_axes) from either layout.
 
-    ``axes`` selects spatial components by index (default all present). Reading a subset is the point of
-    the layout: pass e.g. ``axes=(0,)`` for a slab or ``(0, 1)`` for a cylinder's transverse plane.
-    """
-    kind = position_container(arrays)
-    if kind is not None:
-        suffix = "" if kind == "float" else "_ends"
-        present = [i for i, k in enumerate(POSITION_AXES) if f"{k}{suffix}" in arrays]
-        want = list(present if axes is None else axes)
-        missing = [i for i in want if i not in present]
-        if missing:
-            raise KeyError(f"pack does not carry position axes {missing} "
-                           f"(has {[POSITION_AXES[i] for i in present]}); it was written with a reduced "
-                           f"axis set and cannot serve this encoding")
-        if kind == "float":
-            return np.stack([np.asarray(arrays[POSITION_AXES[i]], dtype) for i in want], axis=2)
-        n_w = int(np.asarray(arrays[f"{POSITION_AXES[present[0]]}_ends"]).shape[0])
-        scale = band_scales(arrays, "pos_band_scale", n_w)                          # (N_w, n_axes, K)
-        ranges = position_ranges(arrays, POSITION_AXES[present[0]])
-        K_b = int(scale.shape[2])
-        cols = []
-        for i in want:
-            ends = np.asarray(arrays[f"{POSITION_AXES[i]}_ends"], np.float64)
-            bands, k0 = [], 0
-            for r, bits in ranges:
-                t = arrays[range_name(POSITION_AXES[i], r, bits)]
-                m = int(t.shape[1]) if bits in NATIVE_BITS else min(int(t.shape[1]) * 8 // bits, K_b - k0)
-                q = np.asarray(_load_range(t, bits, m), np.float64)
-                bands.append(q * scale[:, i, k0:k0 + m]); k0 += m
-            cols.append(np.concatenate([ends] + bands, axis=1))
-        return np.stack(cols, axis=2).astype(dtype)
+def _no_position_axes(arrays):
     # No legacy (n_w, K, 3) fallback by design. A dataset with two position layouts forces every
     # consumer to carry a compatibility branch, and that branch is where silent errors live -- a reader
     # that guesses the wrong convention returns plausible numbers. Fail loudly instead; convert the pack.
-    raise KeyError(
+    return KeyError(
         f"pack has no position axes {POSITION_AXES}; found {sorted(arrays)}. Packs written before the "
         f"axis-per-tensor layout store a single (n_walkers, K, 3) 'dct_coeffs'; re-encode them with "
         f"pack_position_arrays(). This reader does not accept mixed layouts -- a dataset with two "
         f"position layouts forces every consumer to carry a compatibility branch, and that branch is "
         f"where silent errors live.")
+
+
+def _position_tensors(arrays):
+    """``(kind, suffix, present)``: the position container, the suffix of its per-axis tensors and the axes stored."""
+    kind = position_container(arrays)
+    if kind is None:
+        raise _no_position_axes(arrays)
+    suffix = "" if kind == "float" else "_ends"
+    return kind, suffix, [i for i, k in enumerate(POSITION_AXES) if f"{k}{suffix}" in arrays]
+
+
+def position_shape(arrays):
+    """``(n_walkers, K + 2, n_axes)`` of the position coefficients, from the stored tensors' shapes: nothing is decoded."""
+    kind, suffix, present = _position_tensors(arrays)
+    t = np.shape(arrays[f"{POSITION_AXES[present[0]]}{suffix}"])
+    n_c = int(t[1]) if kind == "float" else 2 + int(np.shape(arrays["pos_band_scale"])[-1])
+    return int(t[0]), n_c, len(present)
+
+
+def position_starts(arrays):
+    """``(n_walkers, n_axes)`` float64: every walker's exact start ``r(0)``, the first stored endpoint of each axis --
+    no band is decoded."""
+    _, suffix, present = _position_tensors(arrays)
+    return np.stack([np.asarray(np.asarray(arrays[f"{POSITION_AXES[i]}{suffix}"])[:, 0], np.float64) for i in present], axis=1)
+
+
+def _decoded_once(arrays, kind, selection, prefixes, decode):
+    """``decode()`` through the decoded cache of ``arrays`` (:class:`~dmipy_replay.replay.decoded.PackArrays`) when it has
+    one: keyed on ``kind``, ``selection`` and the stored tensors whose names start with ``prefixes`` (and the pack's
+    ``band_block``), so the same stored tensors decode once per selection. The arrays of a plain ``dict`` decode on every
+    call."""
+    cache = getattr(arrays, "decoded", None)
+    if cache is None:
+        return decode()
+    tensors = {k: v for k, v in arrays.items() if k == "band_block" or k.startswith(prefixes)}
+    return cache.get(kind, selection, tensors, decode)
+
+
+def _decoded_prefix(arrays, kind, selection, prefixes, n, decode, *, axis, offset=0):
+    """The first ``offset + n`` entries along ``axis`` of a decode through the decoded cache of ``arrays``
+    (:meth:`~dmipy_replay.replay.decoded.DecodedCache.get_prefix`), keyed as :func:`_decoded_once` is; the arrays of a plain
+    ``dict`` decode the prefix on every call."""
+    cache = getattr(arrays, "decoded", None)
+    if cache is None:
+        return decode(0, n)
+    tensors = {k: v for k, v in arrays.items() if k == "band_block" or k.startswith(prefixes)}
+    return cache.get_prefix(kind, selection, tensors, n, decode, axis=axis, offset=offset)
+
+
+def read_position_coeffs(arrays, axes=None, dtype=np.float64, *, cached=True, bands=None):
+    """Coefficients as (n_w, K, n_axes) from either layout.
+
+    ``axes`` selects spatial components by index (default all present). Reading a subset is the point of
+    the layout: pass e.g. ``axes=(0,)`` for a slab or ``(0, 1)`` for a cylinder's transverse plane. A band range is
+    dequantised in float64 against its walkers' scales and rounded once to ``dtype`` in place, one axis and range
+    at a time: the temporaries are one range of one axis, never the walkers' whole scale table.
+
+    ``bands`` reads the two endpoints and the lowest ``bands`` bands only, ``(n_w, bands + 2, n_axes)``: bit for bit
+    the leading entries of the full decode, and only those bands are dequantised. Of a pack's ``arrays``
+    a prefix is a view of the full decode when that is held, else of the longest prefix held for the selection, extended by
+    the bands beyond it when it is shorter (:meth:`~dmipy_replay.replay.decoded.DecodedCache.get_prefix`).
+
+    Of a pack's ``arrays`` (:class:`~dmipy_replay.replay.decoded.PackArrays`) the result is decoded once per
+    ``(axes, dtype)`` and the same read-only array returned by every later call, within the pack's decode budget
+    (:class:`~dmipy_replay.replay.decoded.DecodedCache`); ``cached=False`` decodes afresh into a writable array. A plain
+    ``dict`` decodes on every call.
+    """
+    n_bands = position_shape(arrays)[1] - 2
+    if bands is not None and not 0 <= int(bands) <= n_bands:
+        raise ValueError(f"bands = {bands} is outside the {n_bands} bands the pack stores")
+    if bands is not None and int(bands) == n_bands:
+        bands = None
+    sel = (None if axes is None else tuple(int(i) for i in axes), np.dtype(dtype).str)
+    if not cached:
+        return _read_position_coeffs(arrays, axes, dtype, 0, n_bands if bands is None else int(bands))
+    if bands is None:
+        return _decoded_once(arrays, "position_coeffs", sel, "pos_", lambda: _read_position_coeffs(arrays, axes, dtype))
+    cache = getattr(arrays, "decoded", None)
+    if cache is not None:
+        full = cache.peek("position_coeffs", sel, {k: v for k, v in arrays.items() if k == "band_block" or k.startswith("pos_")})
+        if full is not None:
+            return full[:, :2 + int(bands)]
+    return _decoded_prefix(arrays, "position_prefix", sel, "pos_", int(bands),
+                           lambda lo, hi: _read_position_coeffs(arrays, axes, dtype, lo, hi), axis=1, offset=2)
+
+
+def _read_position_coeffs(arrays, axes, dtype, lo=0, hi=None):
+    """The decode of bands ``lo .. hi - 1`` (all of them by default), with the two endpoints in front when ``lo`` is 0."""
+    kind, suffix, present = _position_tensors(arrays)
+    want = list(present if axes is None else axes)
+    missing = [i for i in want if i not in present]
+    if missing:
+        raise KeyError(f"pack does not carry position axes {missing} "
+                       f"(has {[POSITION_AXES[i] for i in present]}); it was written with a reduced "
+                       f"axis set and cannot serve this encoding")
+    n_w, n_c, _ = position_shape(arrays)
+    K_b = n_c - 2
+    hi = K_b if hi is None else int(hi)
+    lo = int(lo)
+    if kind == "float":
+        cols = slice(0, 2 + hi) if lo == 0 else slice(2 + lo, 2 + hi)
+        return np.stack([np.asarray(arrays[POSITION_AXES[i]][:, cols], dtype) for i in want], axis=2)
+    table = np.asarray(arrays["pos_band_scale"], np.float64)                       # (n_blocks, n_axes, K)
+    if "band_block" in arrays:
+        blk = np.asarray(arrays["band_block"], np.int64)
+    elif table.shape[0] != 1:
+        raise KeyError(f"pos_band_scale holds {table.shape[0]} blocks but the pack carries no band_block")
+    else:
+        blk = None
+    ranges = position_ranges(arrays, POSITION_AXES[present[0]])
+    lead = 2 if lo == 0 else 0
+    out = np.empty((n_w, lead + hi - lo, len(want)), dtype)
+    for j, i in enumerate(want):
+        if lo == 0:
+            out[:, :2, j] = np.asarray(arrays[f"{POSITION_AXES[i]}_ends"], np.float64)
+        k0 = 0
+        for r, bits in ranges:
+            t = arrays[range_name(POSITION_AXES[i], r, bits)]
+            m = int(t.shape[1]) if bits in NATIVE_BITS else min(int(t.shape[1]) * 8 // bits, K_b - k0)
+            a0, a1 = max(k0, lo), min(k0 + m, hi)
+            if a1 > a0:
+                s = table[:, i, a0:a1]
+                q = _range_values(t, bits, a1 - a0, a0 - k0)
+                q *= (s[0] if blk is None else s[blk])
+                out[:, lead + a0 - lo:lead + a1 - lo, j] = q
+            k0 += m
+    return out
+
+
+def _per_walker(key, arrays):
+    """Whether tensor ``key`` holds one row per walker: everything but the band scale tables, the field grid and a
+    per-voxel certificate (``voxel_ijk`` beside ``voxel_certificate`` is the certificate's rows)."""
+    base = key.split("/")[-1]
+    if base.endswith("_band_scale") or base == "susc_path_scale" or base.startswith("susc_grid_"):
+        return False
+    return not (base == "voxel_certificate" or (base == "voxel_ijk" and "voxel_certificate" in arrays))
+
+
+def walker_rows(arrays, start, stop):
+    """The tensors of walkers ``start:stop`` of a pack (every window's, under its ``s{i}/`` prefix): each walker-leading
+    tensor sliced, an events stream (RPK.md 9.5.7) cut to those walkers' records with its offsets rebased to them,
+    and the tables -- the band scales, the field grid, a per-voxel certificate -- whole. A slice of a stored tensor
+    is a view: nothing is decoded or copied."""
+    n_w = position_shape(arrays)[0]
+    start, stop = max(0, int(start)), min(n_w, int(stop))
+    out = {}
+    for k, v in arrays.items():
+        base = k.split("/")[-1]
+        if not _per_walker(k, arrays):
+            out[k] = v
+        elif base.endswith("_events_offsets"):
+            off = np.asarray(v[start:stop + 1], np.int64)
+            out[k] = off - off[0]
+        elif base.endswith(("_events_t", "_events_label")):
+            off = arrays[k[:len(k) - len(base)] + base.rsplit("_events_", 1)[0] + "_events_offsets"]
+            out[k] = v[int(off[start]):int(off[stop])]
+        elif np.shape(v)[0] != n_w:
+            raise ValueError(f"tensor {k!r} holds {np.shape(v)[0]} rows for {n_w} walkers: it is neither walker-leading "
+                             "nor a table a reader keeps whole")
+        else:
+            out[k] = v[start:stop]
+    return out
+
 
 def _rates(times):
     """Per-pool rates ``1 / T`` of a list of times by pool id: ``inf`` is no decay; a time that is not positive is
@@ -510,6 +741,7 @@ def _rates(times):
     if not (T > 0).all():
         raise ValueError(f"a relaxation time by pool must be positive, float('inf') for no decay; got {T.tolist()}")
     return 1.0 / T
+
 
 class CumulativeGate:
     """A sample-and-hold gate on its own grid as its running integral: ``gate(t) = int_0^t chi(t') dt'`` for any ``t``
@@ -534,6 +766,22 @@ class CumulativeGate:
     def total(self):
         return float(self.C[-1])
 
+
+def _occupancy_runs(arrays, column):
+    """A column's stored form as the runs :func:`relaxation_logweight_runs` weighs: a static column's labels ``(N_w,)``
+    int64; an events column's ``(offsets, t, label, walker)`` -- the entries of every walker (the label held from each
+    instant), ``walker`` the index of the walker each belongs to. Decoded once per column of a pack's ``arrays``
+    (:func:`read_position_coeffs`) and returned read-only."""
+    def decode():
+        name = column["name"]
+        if column["kind"] == "static":
+            return np.array(arrays[f"{name}_static"], np.int64)
+        off_ = np.array(arrays[f"{name}_events_offsets"], np.int64)
+        return (off_, np.array(arrays[f"{name}_events_t"], np.float64), np.array(arrays[f"{name}_events_label"], np.int64),
+                np.repeat(np.arange(off_.shape[0] - 1), np.diff(off_)))
+    return _decoded_once(arrays, "occupancy_runs", (column["name"], column["kind"]), (f"{column['name']}_",), decode)
+
+
 def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, active, *, t0=0.0, t1):
     """The per-walker relaxation log-weight over the window ``[t0, t1]`` from a C1 column's stored form, exact in time
     (RPK.md 9.5.7): a static column is one run per walker, an events column a run per entry from its instant to the
@@ -546,22 +794,20 @@ def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, act
     invT2, invT1 = _rates(T2_per_comp), _rates(T1_per_comp)
     lon = lambda t: active(t) - chi(t)
     if column["kind"] == "static":
-        lab = np.asarray(arrays[f"{name}_static"]).astype(np.int64)
+        lab = _occupancy_runs(arrays, column)
         on = float(chi(t1) - chi(t0)); off = float(lon(t1) - lon(t0))
         return -(invT2[lab] * on + invT1[lab] * off)
     if column["kind"] != "events":
         raise ValueError(f"C1 column {name!r} is stored as {column['kind']!r}, which this build does not read")
-    off_ = np.asarray(arrays[f"{name}_events_offsets"], np.int64)
-    t = np.asarray(arrays[f"{name}_events_t"], np.float64)
-    lab = np.asarray(arrays[f"{name}_events_label"]).astype(np.int64)
+    off_, t, lab, w = _occupancy_runs(arrays, column)
     n_w = off_.shape[0] - 1
-    w = np.repeat(np.arange(n_w), np.diff(off_))
     t_a = np.maximum(t, float(t0))
     t_b = np.empty_like(t); t_b[:-1] = t[1:]; t_b[-1] = t1
     t_b[off_[1:] - 1] = float(t1)
     t_b = np.minimum(t_b, float(t1))
     per = invT2[lab] * (chi(t_b) - chi(t_a)) + invT1[lab] * (lon(t_b) - lon(t_a))
     return -np.bincount(w, weights=per, minlength=n_w)
+
 
 def surface_logweight_bridge(arrays, meta, rho2_over_D, gate=None, dt_gate=None, *, t0=0.0):
     """The gated surface log-weight ``(rho2 / D) int chi(t) dB(t)`` over the window ``[t0, t0 + T]`` from the contact

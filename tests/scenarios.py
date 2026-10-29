@@ -149,6 +149,91 @@ def exchange_stimulated(ns, p):
     return p.replay(ns.pgste(d, 0.004, 0.02, bvalues=bv), tissue=t, complex_signal=True)
 
 
+# ---- plan before read: what a replay reads, its error, and reads at a stated depth
+def _plan(pl):
+    """A :class:`ReadPlan` as the numbers it states."""
+    return np.array([pl.K, pl.K_stored, pl.band_error, pl.modes, pl.modes_stored, pl.mode_error, pl.bytes_read,
+                     pl.bytes_stored, pl.floor, pl.tol], np.float64)
+
+
+def plan_default(ns, p):
+    return _plan(p.plan(_pgse(ns)))
+
+
+def plan_tight(ns, p):
+    return _plan(p.plan(_pgse(ns), tol=0.01))
+
+
+def plan_carried(ns, p):
+    S = p.replay(_pgse(ns), complex_signal=True)
+    return np.concatenate([S, _plan(S.plan)])
+
+
+def full_read(ns, p):
+    S = p.replay(_pgse(ns), tol=None, complex_signal=True)
+    return np.concatenate([S, _plan(S.plan)])
+
+
+def explicit_K(ns, p):
+    S = p.replay(_pgse(ns), K=12, complex_signal=True)
+    return np.concatenate([S, _plan(S.plan)])
+
+
+def phases_planned(ns, p):
+    w, ew, phi = p.walker_phases(_pgse(ns, b=np.array([0.0, 2e9])))
+    return np.concatenate([(ew[:, None] * np.exp(1j * phi)).sum(0) / w.sum(), _plan(phi.plan)])
+
+
+def walker_range(ns, p):
+    return p.walkers(100, 700).replay(_pgse(ns), complex_signal=True)
+
+
+def decoded_twice(ns, p):
+    seq = _pgse(ns)
+    a = p.replay(seq, complex_signal=True)
+    b = p.replay(seq, complex_signal=True)
+    p.release_decoded()
+    return np.concatenate([a, b, [p.decoded_bytes]])
+
+
+# ---- the band check at the pack's cap
+def band_budget(ns, p):
+    b = p.truncation_budget
+    return np.array([b["cap"], b["other_terms"], b["budget"]])
+
+
+def band_of_pgse(ns, p):
+    return np.array(p.waveform_band(_pgse(ns)), np.float64)
+
+
+def band_of_ogse(ns, p):
+    d, bv = _shells(b=np.array([0.0, 3e8]))
+    return np.array(p.waveform_band(ns.ogse(d, 50.0, 0.02, shape="cosine", bvalues=bv)), np.float64)
+
+
+def band_beyond(ns, p):
+    d, bv = _shells(dirs=DIRS[:1], b=np.array([0.0, 2e8]))
+    return p.replay(ns.ogse(d, 2500.0, 0.02, shape="cosine", bvalues=bv), complex_signal=True)
+
+
+# ---- field modes planned at the certified field scale
+def field_plan(ns, p):
+    return _plan(p.plan(ns.gre(0.006), tissue=_tissue(ns, chi_iso=-1e-7), scanner=7.0))
+
+
+def field_modes(ns, p):
+    S = p.replay(ns.gre(0.006), tissue=_tissue(ns, chi_iso=-1e-7), scanner=7.0, modes=4, complex_signal=True)
+    return np.concatenate([S, _plan(S.plan)])
+
+
+def field_full(ns, p):
+    return p.replay(ns.gre(0.006), tissue=_tissue(ns, chi_iso=-1e-7), scanner=7.0, tol=None, complex_signal=True)
+
+
+def field_beyond_envelope(ns, p):
+    return p.replay(ns.gre(0.006), tissue=_tissue(ns, chi_iso=-1e-5), scanner=11.7, complex_signal=True)
+
+
 SCENARIOS = [
     ("bare", "cylinder", bare), ("square_lobes", "cylinder", square_lobes), ("relaxed", "cylinder", relaxed),
     ("surface", "cylinder", surface), ("surface_longitudinal", "cylinder", surface_longitudinal),
@@ -161,4 +246,14 @@ SCENARIOS = [
     ("long_te", "windows", long_te), ("long_te_relaxed", "windows", long_te_relaxed), ("long_te_bloch", "windows", long_te_bloch),
     ("gre_field_3T", "field", gre_field_3T), ("gre_field_7T_aniso", "field", gre_field_7T_aniso), ("se_field", "field", se_field),
     ("field_posed", "field", field_posed), ("bloch_field", "field", bloch_field),
+    ("plan_default", "cylinder", plan_default), ("plan_tight", "cylinder", plan_tight),
+    ("plan_carried", "cylinder", plan_carried), ("full_read", "cylinder", full_read), ("explicit_K", "cylinder", explicit_K),
+    ("phases_planned", "cylinder", phases_planned), ("walker_range", "cylinder", walker_range),
+    ("decoded_twice", "cylinder", decoded_twice), ("plan_windows", "windows", plan_default),
+    ("plan_exchange", "permeable", plan_carried),
+    ("band_budget", "cylinder", band_budget), ("band_of_pgse", "cylinder", band_of_pgse),
+    ("band_of_ogse", "cylinder", band_of_ogse), ("band_beyond", "cylinder", band_beyond),
+    ("band_budget_windows", "windows", band_budget), ("band_of_pgse_windows", "windows", band_of_pgse),
+    ("field_plan", "field", field_plan), ("field_modes", "field", field_modes), ("field_full", "field", field_full),
+    ("field_beyond_envelope", "field", field_beyond_envelope), ("band_budget_field", "field", band_budget),
 ]
