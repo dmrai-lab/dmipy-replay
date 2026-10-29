@@ -213,7 +213,26 @@ def band_of_ogse(ns, p):
 
 def band_beyond(ns, p):
     d, bv = _shells(dirs=DIRS[:1], b=np.array([0.0, 2e8]))
-    return p.replay(ns.ogse(d, 2500.0, 0.02, shape="cosine", bvalues=bv), complex_signal=True)
+    return p.replay(ns.ogse(d, 2500.0, 0.02, shape="trapezoid", slew_rate=np.inf, bvalues=bv), complex_signal=True)
+
+
+def _stated_cap(p, cap=0.03):
+    """``p`` with a stated numerical cap (``fidelity.target_floor``) beside its certified terms."""
+    fid = dict(p.meta["fidelity"], target_floor=cap, err_quadrature=2e-3, err_quantisation=1e-3)
+    return type(p)(p.arrays, dict(p.meta, fidelity=fid), source=p.source)
+
+
+def band_budget_stated(ns, p):
+    return band_budget(ns, _stated_cap(p))
+
+
+def band_of_ogse_stated(ns, p):
+    return band_of_ogse(ns, _stated_cap(p))
+
+
+def plan_stated(ns, p):
+    S = _stated_cap(p).replay(_pgse(ns), complex_signal=True)
+    return np.concatenate([S, _plan(S.plan)])
 
 
 # ---- field modes planned at the certified field scale
@@ -253,7 +272,8 @@ SCENARIOS = [
     ("plan_exchange", "permeable", plan_carried),
     ("band_budget", "cylinder", band_budget), ("band_of_pgse", "cylinder", band_of_pgse),
     ("band_of_ogse", "cylinder", band_of_ogse), ("band_beyond", "cylinder", band_beyond),
-    ("band_budget_windows", "windows", band_budget), ("band_of_pgse_windows", "windows", band_of_pgse),
+    ("band_budget_stated", "cylinder", band_budget_stated), ("band_of_ogse_stated", "cylinder", band_of_ogse_stated),
+    ("plan_stated", "cylinder", plan_stated), ("band_budget_windows", "windows", band_budget), ("band_of_pgse_windows", "windows", band_of_pgse),
     ("field_plan", "field", field_plan), ("field_modes", "field", field_modes), ("field_full", "field", field_full),
     ("field_beyond_envelope", "field", field_beyond_envelope), ("band_budget_field", "field", band_budget),
 ]

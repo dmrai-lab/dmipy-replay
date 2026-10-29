@@ -171,15 +171,16 @@ def rewrite_imports(path, text):
         lines[first:last + 1] = [new]
     text, n = "".join(lines), len(edits)
     # a module named in a string (``__import__("dmipy_sim.spec.substrate")``, ``importlib.import_module``)
-    for node in ast.walk(ast.parse(text)):
-        if isinstance(node, ast.Constant) and node.value in MODULES:
-            lines = text.splitlines(keepends=True)
-            line = lines[node.lineno - 1]
-            seg = line[node.col_offset:node.end_col_offset]
-            lines[node.lineno - 1] = (line[:node.col_offset] + seg.replace(node.value, MODULES[node.value])
-                                      + line[node.end_col_offset:])
-            text, n = "".join(lines), n + 1
-    return text, n
+    while True:                                         # one string at a time: a rewrite moves the columns after it
+        node = next((nd for nd in ast.walk(ast.parse(text)) if isinstance(nd, ast.Constant) and nd.value in MODULES), None)
+        if node is None:
+            return text, n
+        lines = text.splitlines(keepends=True)
+        line = lines[node.lineno - 1]
+        seg = line[node.col_offset:node.end_col_offset]
+        lines[node.lineno - 1] = (line[:node.col_offset] + seg.replace(node.value, MODULES[node.value])
+                                  + line[node.end_col_offset:])
+        text, n = "".join(lines), n + 1
 
 
 def delete_definitions(path, text, names):

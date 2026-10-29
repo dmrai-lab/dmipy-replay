@@ -28,7 +28,7 @@ def test_matches_sim(name, key, fn):
     if name in INDEX["failed"]:
         with pytest.raises(Exception) as e:
             fn(NS, _pack(key))
-        assert type(e.value).__name__ == INDEX["failed"][name].split(":")[0]
+        assert f"{type(e.value).__name__}: {e.value}" == INDEX["failed"][name]
         return
     got = np.asarray(fn(NS, _pack(key)))
     want = REF[name]

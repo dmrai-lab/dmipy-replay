@@ -1,4 +1,4 @@
-"""dmipy-replay: replay Monte-Carlo diffusion-MRI walks from the Hub with any acquisition.
+"""dmipy-replay: the reader of Monte-Carlo diffusion-MRI replay packs, from the Hub, with any acquisition.
 
 A replay pack (``.rpk``, replay-pack-spec RPK.md) stores what a walk leaves of every walker that no acquisition
 changes -- its path as sine bands, its pool, its wall contact, the field it read -- so any gradient waveform, RF
@@ -25,6 +25,9 @@ from .spec.tissue import Tissue
 from .spec.substrate import SubstrateSpec
 from .replay.replay import ReplayPack, read_rpk, compile_scheme
 from .replay.columnar import ColumnarPack, open_columnar
+from .replay.remote import RemotePack
+from .replay.time_segments import TimeSegmentLayout
+from .replay.planning import ReadPlan
 from .phantom.grid import Grid
 from .replay import hub
 
@@ -33,4 +36,5 @@ __version__ = "0.1.0"
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
-           "ReplayPack", "read_rpk", "compile_scheme", "ColumnarPack", "open_columnar", "Grid", "hub"]
+           "ReplayPack", "read_rpk", "compile_scheme", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
+           "ReadPlan", "Grid", "hub"]
