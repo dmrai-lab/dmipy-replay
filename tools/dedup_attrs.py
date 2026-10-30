@@ -43,6 +43,13 @@ def main(apply):
                 home = NAMES.get((aliases[node.value.id], node.attr))
                 if home:
                     hits.append((node.lineno, node.col_offset, node.value.id, node.attr, home))
+            # ``monkeypatch.setattr(cx, "name", ...)``: the name is patched where it lives
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "setattr"
+                  and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id in aliases
+                  and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
+                home = NAMES.get((aliases[node.args[0].id], node.args[1].value))
+                if home:
+                    hits.append((node.args[0].lineno, node.args[0].col_offset, node.args[0].id, None, home))
         if not hits:
             continue
         lines = text.splitlines(keepends=True)
@@ -51,6 +58,10 @@ def main(apply):
             new_alias = "_r_" + home.rsplit(".", 1)[1]
             need[new_alias] = home
             line = lines[ln - 1]
+            if attr is None:                                 # the module argument of a setattr
+                assert line[col:col + len(alias)] == alias, (p, ln, line)
+                lines[ln - 1] = line[:col] + new_alias + line[col + len(alias):]
+                continue
             assert line[col:col + len(alias) + 1 + len(attr)] == f"{alias}.{attr}", (p, ln, line)
             lines[ln - 1] = line[:col] + f"{new_alias}.{attr}" + line[col + len(alias) + 1 + len(attr):]
         imports = "".join(f"import {home} as {a}\n" for a, home in sorted(need.items()))
@@ -58,7 +69,7 @@ def main(apply):
                       and getattr(n, "module", None) != "__future__"), 0)
         lines[first:first] = [imports]
         total += len(hits)
-        print(f"{p}: {len(hits)} ({', '.join(sorted({h[3] for h in hits}))})")
+        print(f"{p}: {len(hits)} ({', '.join(sorted({str(h[3]) for h in hits}))})")
         if apply:
             p.write_text("".join(lines))
     print(f"{total} attribute reads")

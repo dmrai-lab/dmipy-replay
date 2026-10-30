@@ -249,9 +249,17 @@ def _definition_value(val):
 
 
 def read_seq(src):
-    """A ``.seq`` file (a path, or its text) as a :class:`PulseqFile`."""
+    """A ``.seq`` file (a path, its text, or a sequence object that writes one, ``src.write(path)``: a
+    ``pypulseq.Sequence``) as a :class:`PulseqFile`."""
     if isinstance(src, PulseqFile):
         return src
+    if not isinstance(src, (str, os.PathLike)) and callable(getattr(src, "write", None)):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "sequence.seq")
+            src.write(path)
+            with open(path) as f:
+                return PulseqFile(f.read())
     s = os.fspath(src) if not isinstance(src, str) else src
     if "\n" not in s and os.path.isfile(s):
         with open(s) as f:
@@ -325,7 +333,7 @@ def _excitation_time(f):
         use = r["use"]
         if use is None:
             use = "excitation" if abs(np.sum(sig) * f.rf_raster) * 360.0 < 90.01 else "refocusing"
-        if use == "excitation":
+        if use in ("excitation", "undefined"):            # the reference reader's rule: an undefined pulse excites
             centre = r["center"] if r["center"] is not None else _rf_center(t, sig)
             return starts[bid] + r["delay"] + centre
     return None
@@ -342,7 +350,7 @@ def _decode_rf_events(s):
 
 
 def from_pulseq(src, *, dt=None, readout_s=None):
-    """A Pulseq ``.seq`` (a path, its text, or a :class:`PulseqFile`) as a
+    """A Pulseq ``.seq`` (a path, its text, a :class:`PulseqFile`, or a sequence object that writes one) as a
     :class:`~dmipy_replay.acquisition.scanner_sequence.ScannerSequence` of one measurement.
 
     The grid is uniform at ``dt`` (the file's ``dmipy_dt``, else its gradient raster) from the first excitation's

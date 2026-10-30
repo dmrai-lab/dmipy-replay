@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dmipy-replay"
 version = "0.1.0"
-description = "Replay Monte-Carlo diffusion-MRI walks from the Hub with any acquisition: numpy only, no walk, no GPU"
+description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; numpy only"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [{ name = "Rutger Fick", email = "fick.rutger@gmail.com" }]
@@ -19,6 +19,13 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
+
+keywords = ["diffusion MRI", "Monte Carlo", "replay pack", "Pulseq", "simulation"]
+
+[project.urls]
+Homepage = "https://github.com/dmrai-lab/dmipy-replay"
+Source = "https://github.com/dmrai-lab/dmipy-replay"
+Specification = "https://github.com/dmrai-lab/replay-pack-spec"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]

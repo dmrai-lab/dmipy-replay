@@ -91,3 +91,23 @@ def test_a_waveform_off_the_stored_shapes_is_refused(lay):
     G[:, mid:mid + 5] *= 1.3                                           # a bump on the first lobe's plateau
     with pytest.raises(ValueError, match="fits no stored partition"):
         lay.fit(dr.ScannerSequence(G=G, dt=seq.dt, rf=seq.rf, readout=seq.readout))
+
+
+def test_a_hub_layout_opens_from_the_files_its_partitions_need(tmp_path, monkeypatch):
+    """``open("hf://...")`` pins the revision once and fetches the manifest, then the shared columns, the tiers and the
+    words of the partitions asked for, into the cache under that commit, and nothing else."""
+    import shutil
+    from dmipy_replay.replay import hub
+    monkeypatch.setenv("DMIPY_REPLAY_CACHE", str(tmp_path))
+    asked = []
+    monkeypatch.setattr(hub, "revision_of", lambda repo, revision="main": "c0ffee")
+
+    def download(url, dest):
+        rel = url.split("/resolve/c0ffee/", 1)[1].split("/", 1)[1]
+        asked.append(rel)
+        shutil.copy(DATA / "time_segments" / rel, dest)
+    monkeypatch.setattr(hub, "_download", download)
+    lay = TimeSegmentLayout.open("hf://owner/name/time_segments", partitions=["box"])
+    assert asked[0] == "manifest.json" and not any(a.startswith("p_") and a != "p_box.npy" for a in asked)
+    S, _ = lay.image(ACQ["box"][1])
+    np.testing.assert_allclose(S, REF["box/S"], rtol=RTOL, atol=ATOL)
