@@ -560,6 +560,13 @@ class RFSchedule(tuple):
                 return e.t_s
         return None
 
+    @property
+    def n_refocusing(self):
+        """The number of refocusing pulses of the schedule: the pulses the coherence state machine reads as a
+        refocus (a ``refocus`` label, or an unlabelled 180 while transverse). Excitation, store and recall are not
+        counted."""
+        return sum(1 for _, role in self._roles()[0] if role == "refocus")
+
     def sign(self, t_grid):
         """The sign of the EFFECTIVE gradient over ``t_grid`` -- ``(len(t_grid),)`` of +-1: the spin-echo gate
         ``s(t)`` (RPK.md 6.6), and the one un-fold between the two gradients a sequence has (the PHYSICAL one a

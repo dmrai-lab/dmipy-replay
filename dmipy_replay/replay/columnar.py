@@ -255,7 +255,12 @@ class ColumnarPack:
                     bytes=per_row * rows, bytes_per_row=per_row, columns=names)
 
     def plan(self, seq, *, tissue=None, scanner=None, tol=0.25, voxels=None):
-        """What a replay of ``seq`` reads: bands, field modes, tiers, rows and bytes -- before any byte moves."""
+        """What a replay of ``seq`` reads: bands, field modes, tiers, rows and bytes -- before any byte moves. A
+        waveform outside the scanner class the layout is certified for is refused first
+        (:func:`~dmipy_replay.replay.replay.check_acquisition_envelope`)."""
+        from .replay import check_acquisition_envelope, field_envelope_of, field_term
+        f = field_term(self.susceptibility_field, tissue, scanner, field_envelope_of(self.meta))
+        check_acquisition_envelope(self.meta, seq, field_active=f.active)
         K, eK = self.bands_for(seq, tol); M, eM = self.modes_for(seq, scanner, tissue, tol)
         return self._plan(K, eK, M, eM, *self._tiers_of(tissue), voxels)
 

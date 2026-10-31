@@ -96,6 +96,7 @@ def main():
                             capture_output=True, text=True).stdout.strip()
     (OUT / "reference.json").write_text(json.dumps(dict(dmipy_sim_commit=commit, scenarios=[s[0] for s in SCENARIOS],
                                                         failed=failed), indent=1))
+    subprocess.run([sys.executable, str(ROOT / "tools" / "stamp_fixtures.py")], check=True)   # the scanner class each replay is held to
 
 
 if __name__ == "__main__":
