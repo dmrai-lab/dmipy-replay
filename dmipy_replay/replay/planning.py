@@ -36,10 +36,19 @@ PLAN_TOL = 0.25
 PILOT_WALKERS = 4096
 
 
+FLOOR_CERTIFICATE = "fidelity.floor_max"
+FLOOR_N_WALKERS = "1 / sqrt(n_walkers) (the certificate states no floor)"
+
+
 def floor_of(meta, n_walkers):
-    """The Monte-Carlo floor a plan is measured against: the certificate's ``fidelity.floor_max``; a pack whose certificate
-    states none (walkers that never moved) is held to the largest floor its walkers could have, ``1 / sqrt(n_walkers)``."""
-    return float((meta.get("fidelity") or {}).get("floor_max") or 0.0) or 1.0 / np.sqrt(float(n_walkers))
+    """``(floor, source)``: the Monte-Carlo floor a plan is measured against and where it came from. The certificate's
+    ``fidelity.floor_max`` when it states a positive one (:data:`FLOOR_CERTIFICATE`); a pack whose certificate states none
+    (walkers that never moved) is held to the largest floor its walkers could have, ``1 / sqrt(n_walkers)``
+    (:data:`FLOOR_N_WALKERS`), and the plan records that."""
+    stated = (meta.get("fidelity") or {}).get("floor_max")
+    if stated is not None and float(stated) > 0.0:
+        return float(stated), FLOOR_CERTIFICATE
+    return 1.0 / float(np.sqrt(float(n_walkers))), FLOOR_N_WALKERS
 
 
 def pilot_size(meta, n_walkers):
@@ -146,6 +155,7 @@ class ReadPlan:
     floor: float
     bytes_read: int
     bytes_stored: int
+    floor_source: str = FLOOR_CERTIFICATE         #: where :attr:`floor` came from (:func:`floor_of`)
 
     @property
     def limit(self):
@@ -164,7 +174,7 @@ class ReadPlan:
         s = (f"K = {self.K}/{self.K_stored} bands ({self.bands_chosen}, error {self.band_error:.2e}; variance {self.band_variance})")
         if self.modes_stored:
             s += f"; {self.modes}/{self.modes_stored} modes ({self.modes_chosen}, error {self.mode_error:.2e}; variance {self.mode_variance})"
-        return s + f"; limit {self.limit:.2e} = {self.tol:g} x floor {self.floor:.2e}; reads {self.bytes_read} of {self.bytes_stored} bytes"
+        return s + f"; limit {self.limit:.2e} = {self.tol:g} x floor {self.floor:.2e} ({self.floor_source}); reads {self.bytes_read} of {self.bytes_stored} bytes"
 
 
 class Planned(np.ndarray):

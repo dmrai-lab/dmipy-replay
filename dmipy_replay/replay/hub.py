@@ -231,7 +231,10 @@ def fetch_windows_from(url, k, local_path, *, revision):
     base = 8 + n
     names = [x for x in header if x != "__metadata__"]
     meta = json.loads((header.get("__metadata__") or {}).get("rpk") or "{}")
-    n_total = int(((meta.get("walk_params") or {}).get("windows") or {}).get("n") or 1)
+    n_stated = ((meta.get("walk_params") or {}).get("windows") or {}).get("n")
+    if n_stated is None:
+        raise ValueError(f"{url}: the pack states no walk_params.windows.n; its storage windows are not countable")
+    n_total = int(n_stated)
     if k > n_total:
         raise ValueError(f"{url}: this pack stores {n_total} window(s); windows=range({k}) asks for more than it has")
     per_window = {x[3:] for x in names if x.startswith("s1/")}

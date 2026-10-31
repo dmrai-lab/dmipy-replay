@@ -19,10 +19,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # numpy is the whole dependency; safetensors is installed only as the oracle the container is checked against
+      # numpy is the whole dependency; the test extra adds pytest and safetensors (the oracle the container is checked against)
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]" safetensors
+          pip install -e ".[test]"
+      - name: Test
+        run: pytest -q
+
+  numpy-floor:
+    # the declared lower bound of numpy (pyproject.toml): the suite on the oldest numpy it passes on
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" "numpy==2.0.0"
       - name: Test
         run: pytest -q

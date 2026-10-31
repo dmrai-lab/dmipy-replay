@@ -168,17 +168,6 @@ def gradient_limits(model, *, regime="default"):
     return g_max, get_limit(model, "gradient", slew_name, si=True)
 
 
-def sar_limit(region="whole_body", mode="normal"):
-    """IEC 60601-2-33 SAR limit (W/kg). ``region`` in {whole_body,head,local_head,...};
-    ``mode`` in {normal, first_level}."""
-    key = f"{region}_{mode}"
-    sar = SCANNER_CONSTANTS["safety"]["sar"]
-    if key not in sar:
-        raise KeyError(f"No SAR limit '{key}'. Have: "
-                       f"{[k for k in sar if sar[k].get('unit') == 'W/kg']}")
-    return sar[key]["value"]
-
-
 def get_citation(source_key):
     """Return the citation dict for a ``source_key``."""
     return SCANNER_CONSTANTS["citations"][source_key]

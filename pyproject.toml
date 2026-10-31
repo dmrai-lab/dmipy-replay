@@ -18,7 +18,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24"]
+# 2.0 is the oldest numpy the test suite passes on (np.trapezoid is new in 2.0; the suite was run on numpy 2.0.0)
+dependencies = ["numpy>=2.0"]
 
 keywords = ["diffusion MRI", "Monte Carlo", "replay pack", "Pulseq", "simulation"]
 
@@ -28,7 +29,7 @@ Source = "https://github.com/dmrai-lab/dmipy-replay"
 Specification = "https://github.com/dmrai-lab/replay-pack-spec"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+test = ["pytest>=7.0", "safetensors>=0.4"]      # safetensors is the oracle the container is checked against
 
 [tool.setuptools.packages.find]
 include = ["dmipy_replay*"]

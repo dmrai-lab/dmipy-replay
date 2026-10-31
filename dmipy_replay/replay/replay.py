@@ -1069,7 +1069,6 @@ class ReplayPack:
         The gradient term is :func:`_band_phase` and nothing else, so it is the same number
         :func:`~dmipy_replay.replay.study.walker_primitives` contracts, on every route and at every ``b``
         (dmipy-sim#484)."""
-        n_w, dt = P["n_w"], P["dt"]
         phi = _band_phase(P, W=P.get("W"))                                            # (n_w, n_meas)
         if P["B0"] is None or P["M_use"] == 0:                                       # a field term of zero (field_term), or a plan that reads no mode
             return phi
@@ -1451,7 +1450,8 @@ class ReplayPack:
         from .field import path_mode_count
         return path_mode_count(self.arrays if self.n_windows == 1 else self._windows()[0][0].arrays, pm)
 
-    def _make_plan(self, windows, K, eK, src_K, how_K, M, M_st, eM, src_M, how_M, tol, floor):
+    def _make_plan(self, windows, K, eK, src_K, how_K, M, M_st, eM, src_M, how_M, tol, floor,
+                   floor_source="none: a full read has no truncation to bound"):
         from .planning import planned_bytes
         read = stored = 0
         for seg, _, _ in windows:
@@ -1461,7 +1461,8 @@ class ReplayPack:
             read += r; stored += st
         return ReadPlan(K=int(K), K_stored=int(self.K), band_error=float(eK), band_variance=src_K, bands_chosen=how_K,
                         modes=int(M), modes_stored=int(M_st), mode_error=float(eM), mode_variance=src_M, modes_chosen=how_M,
-                        tol=float(tol), floor=float(floor), bytes_read=int(read), bytes_stored=int(stored))
+                        tol=float(tol), floor=float(floor), bytes_read=int(read), bytes_stored=int(stored),
+                        floor_source=floor_source)
 
     def _read_plan(self, G_eff, dt_wf, gate, windows, field, *, tol, K, modes, any_field=False):
         """The :class:`~dmipy_replay.replay.planning.ReadPlan` for the effective gradient ``G_eff`` (in the pack's frame) and
@@ -1479,7 +1480,7 @@ class ReplayPack:
         M_st = self._mode_count(pm) if pm is not None else 0
         if tol is None and K is None and modes is None:
             return self._full_plan("a full read: every stored band and mode (tol=None)")
-        floor = floor_of(self.meta, self.n_walkers)
+        floor, floor_source = floor_of(self.meta, self.n_walkers)
         tol_eff = PLAN_TOL if tol is None else float(tol)
         limit = tol_eff * floor
         wins = [(T_s, t0) for _, t0, T_s in windows]
@@ -1530,7 +1531,7 @@ class ReplayPack:
                 Mp, eM = fewest(tail, range(M_st + 1), limit); how_M = "planned"
             else:
                 Mp, eM, how_M = int(modes), float(tail[int(modes)]), "explicit"
-        return self._make_plan(windows, Kp, eK, src_K, how_K, Mp, M_st, eM, src_M, how_M, tol_eff, floor)
+        return self._make_plan(windows, Kp, eK, src_K, how_K, Mp, M_st, eM, src_M, how_M, tol_eff, floor, floor_source)
 
     def _mode_variance(self, seg, pm):
         """``((K_f,) variance summed over the channels, source)`` of the field modes a plan weighs: the header's record, else
@@ -1648,7 +1649,7 @@ class ReplayPack:
         T_w = self.T_window
         if self.n_windows == 1:
             return T_w, 1
-        windows = sum(1 for i in range(int(self.n_windows)) if i * T_w < float(T_acq) * (1.0 - 1e-12)) or 1
+        windows = max(1, sum(1 for i in range(int(self.n_windows)) if i * T_w < float(T_acq) * (1.0 - 1e-12)))   # a read has at least window 0
         return windows * T_w, windows
 
     def _check_band(self, waveform):
@@ -1938,7 +1939,10 @@ def truncation_budget(meta, *, floor, floor_source):
         return dict(cap=float(floor), cap_source=str(floor_source), other_terms=0.0, budget=float(floor))
     cap = float(fid["target_floor"])
     named = sum(float(fid[k]) for k in NUMERICAL_TERMS if fid.get(k) is not None)
-    left_over = (float(fid["err_max"]) - float(fid.get("err_truncation") or 0.0)) if fid.get("err_max") is not None else 0.0
+    if fid.get("err_max") is not None and fid.get("err_truncation") is None:
+        raise ValueError("the certificate states fidelity.err_max but not fidelity.err_truncation: the truncation budget "
+                         "cannot split the error into the truncation and the other terms; re-certify the pack")
+    left_over = (float(fid["err_max"]) - float(fid["err_truncation"])) if fid.get("err_max") is not None else 0.0
     other = max(named, left_over)
     return dict(cap=cap, cap_source="fidelity.target_floor", other_terms=other, budget=max(cap - other, 0.0))
 
