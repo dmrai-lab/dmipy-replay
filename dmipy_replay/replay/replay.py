@@ -233,6 +233,84 @@ def field_term(declared, tissue, scanner, envelope=None):
     return term
 
 
+#: Relative tolerance on a waveform's per-axis gradient amplitude against ``G_max``: the waveform's samples are
+#: float32, so a lobe built at exactly ``G_max`` reads back to float32's rounding.
+GRADIENT_RTOL = 1e-6
+
+#: How many steps of its slope a sampled ramp may carry between two adjacent samples, against ``slew_max``. The
+#: builders sample a lobe at the middle of each step and cut it at a whole step, so the last sample of a ramp sits up to
+#: 1.5 steps of the slope above the zero that follows; a ramp at exactly ``slew_max`` therefore reads at most
+#: ``1.5 slew_max`` from its samples. A lobe that switches within one step reads as ``G / dt``, orders of magnitude above
+#: any scanner's limit, and is refused.
+SLEW_SAMPLING = 1.5
+
+def check_acquisition_envelope(meta, waveform, *, field_active=False):
+    """Refuse, by name, a waveform outside the scanner class a pack is certified for (RPK.md 11: a request inside the
+    envelope is guaranteed, one outside is surfaced, never extrapolated). The guarantee is the class
+    ``replay_envelope.acquisition`` states -- ``bound`` ``"scanner_class"``, with ``scanner``, ``G_max`` (T/m, per axis)
+    and ``slew_max`` (T/m/s) -- and never a ``b`` battery. A header without that class (no ``bound``, or a battery
+    bound) states no guarantee a waveform can be held to and is refused too, as is a class missing a limit.
+
+    * ``G_max``: the largest played gradient (:attr:`ScannerSequence.played_gradient`, the coils' own) on any axis,
+      within :data:`GRADIENT_RTOL`.
+    * ``slew_max``: the largest per-axis sampled slew -- adjacent samples' difference over ``dt``, the first sample
+      against zero -- within :data:`SLEW_SAMPLING` times the limit.
+    * ``max_refocusing_pulses``: where the pack stores a field channel and the request has a field term
+      (``field_active``), the schedule's refocusing pulses (:attr:`RFSchedule.n_refocusing`) at most the depth the
+      field channel is certified at.
+
+    The field strength and the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0``
+    is certified over the range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`).
+
+    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` and ``slew_max`` in the same
+    header keys and is held to them by this function; its refusals name the view."""
+    env = meta.get("replay_envelope") or {}
+    acq = env.get("acquisition") or {}
+    ident = meta.get("id")
+    if acq.get("bound") != "scanner_class":
+        raise ValueError(f"pack {ident!r} states no scanner-class envelope (replay_envelope.acquisition.bound = "
+                         f"{acq.get('bound')!r}): its certificate is a battery of b values, which is no guarantee for a "
+                         "waveform. Walk the substrate again with a scanner class (scanner, G_max, slew_max)")
+    missing = [k for k in ("scanner", "G_max", "slew_max") if acq.get(k) is None]
+    if missing:
+        raise ValueError(f"pack {ident!r} declares the scanner class {acq.get('scanner')!r} without "
+                         f"replay_envelope.acquisition.{', '.join(missing)}")
+    ls = (meta.get("provenance") or {}).get("length_scaled")
+    via = (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
+           if ls else " (replay_envelope.acquisition)")
+    G_max, slew_max = float(acq["G_max"]), float(acq["slew_max"])
+    played = np.asarray(getattr(waveform, "played_gradient", waveform.G), np.float64)
+    g = float(np.abs(played).max(initial=0.0))
+    if g > G_max * (1.0 + GRADIENT_RTOL):
+        raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {G_max:.4g} T/m per axis of "
+                         f"the scanner class {acq['scanner']!r} this pack is certified for{via}")
+    ramp = np.diff(played, axis=1, prepend=0.0) / float(waveform.dt)
+    sl = float(np.abs(ramp).max(initial=0.0))
+    if sl > slew_max * SLEW_SAMPLING * (1.0 + GRADIENT_RTOL):
+        raise ValueError(f"the waveform slews {sl:.4g} T/m/s on one axis (sampled), beyond the slew_max = {slew_max:.4g} "
+                         f"T/m/s (x {SLEW_SAMPLING:g} for a sampled ramp) of the scanner class {acq['scanner']!r} this pack is certified for{via}")
+    depth = acq.get("max_refocusing_pulses")
+    if field_active and depth is not None:
+        n = waveform.rf.n_refocusing
+        if n > int(depth):
+            raise ValueError(f"the waveform plays {n} refocusing pulses with a field term, beyond the {int(depth)} "
+                             "this pack's field channel is certified for (replay_envelope.acquisition.max_refocusing_pulses)")
+
+
+def field_envelope_of(meta):
+    """:attr:`ReplayPack.field_envelope` of a header ``meta`` (a pack's, or a columnar layout's)."""
+    env = meta.get("replay_envelope") or {}
+    tissue = env.get("tissue") or {}
+    unknown = set(tissue) - {"rho2_over_D_max", "chi_max"}
+    if unknown:
+        raise ValueError(f"this pack's replay_envelope.tissue declares {sorted(unknown)}; it takes only "
+                         "rho2_over_D_max and chi_max")
+    chi, B0s = tissue.get("chi_max"), (env.get("acquisition") or {}).get("B0_list")
+    if chi is None or not B0s:
+        return None
+    return dict(B0_max=float(max(B0s)), chi_max=float(chi), B0_chi_max=float(max(B0s)) * float(chi))
+
+
 def _numpy_bloch():
     """The numpy vector-Bloch propagator, the reference (:func:`~dmipy_replay.replay.bloch.replay_bloch`)."""
     from .bloch import replay_bloch
@@ -450,12 +528,11 @@ class ReplayPack:
         """The field tier's envelope, ``{"B0_max", "chi_max", "B0_chi_max"}``: the largest field strength
         (``replay_envelope.acquisition.B0_list``), the susceptibility scale (``replay_envelope.tissue.chi_max``) and
         their product, the one certified field scale every field term was read at; ``None`` when the pack stores no
-        field or states neither. A replay beyond it is refused (:func:`field_term`)."""
-        chi = self._envelope_tissue().get("chi_max")
-        B0s = ((self.meta.get("replay_envelope") or {}).get("acquisition") or {}).get("B0_list")
-        if chi is None or not B0s:
-            return None
-        return dict(B0_max=float(max(B0s)), chi_max=float(chi), B0_chi_max=float(max(B0s)) * float(chi))
+        field or states neither. ``B0_list`` lists the strengths the certificate was measured at, and what it covers is
+        the range up to the largest: the field term is linear in ``B0 chi`` and the codec, the field read and the mode
+        count are all certified at that one largest product, so any ``B0`` in ``[0, max(B0_list)]`` is served. A replay
+        beyond it is refused (:func:`field_term`)."""
+        return field_envelope_of(self.meta)
 
     def _check_rho2(self, rho2_over_D):
         """Refuse a relaxivity beyond the contact tier's envelope (:attr:`rho2_over_D_max`), naming both."""
@@ -667,13 +744,13 @@ class ReplayPack:
         unchanged, and so is the field path channel; the grid route reads the scaled positions against the
         scaled grid. :attr:`~dmipy_replay.spec.Tissue.D` on a replay resolves against the view's diffusivity.
 
-        Both directions are exact in the physics; what bounds ``s`` is the certificate. The codec error and the
-        Monte-Carlo floor were measured on this grid over the battery up to
-        ``replay_envelope.acquisition.b_max``, and the view at ``b`` is the walk at ``s^2 b``, so the view
-        serves ``b <= b_max / s^2`` -- more than the pack states for ``s < 1``, less for ``s > 1`` -- which its
-        envelope states and :meth:`_check_length_scale` holds every replay to; the contact tier's
-        ``rho2_over_D_max`` moves to ``rho2_over_D_max / s`` the same way. The pair is recorded in
-        ``provenance.length_scaled`` (``s`` cumulative over repeated views).
+        Both directions are exact in the physics; what bounds ``s`` is the certificate. The view at ``G`` is the
+        walk at ``s G``, so the scanner class the pack is certified for (``replay_envelope.acquisition``) moves to
+        ``G_max / s`` and ``slew_max / s`` -- more than the pack states for ``s < 1``, less for ``s > 1`` -- and
+        :meth:`_check_envelope` holds every replay to the moved limits, the view carrying no rule of its own; the
+        contact tier's ``rho2_over_D_max`` moves to ``rho2_over_D_max / s`` the same way. The pair is recorded in
+        ``provenance.length_scaled`` (``s`` cumulative over repeated views), with the battery's ``b_max`` over
+        ``s^2`` beside it.
 
         With :meth:`at_diffusivity` (``a >= 1``) a target ``(L, D, T)`` is reached from a walk ``(L0, D0, T0)``
         by ``s = L / L0`` then ``a = D / (s^2 D0)`` when ``D / L^2 >= D0 / L0^2`` and ``D T / L^2 <= D0 T0 / L0^2``:
@@ -715,6 +792,9 @@ class ReplayPack:
         b_max = acq.get("b_max")
         if b_max is not None:
             acq["b_max"] = float(b_max) / (s * s)
+        for key in ("G_max", "slew_max"):                                        # the view at G is this pack at s G
+            if acq.get(key) is not None:
+                acq[key] = float(acq[key]) / s
         tis = env.get("tissue") or {}
         if tis.get("rho2_over_D_max") is not None:
             tis["rho2_over_D_max"] = float(tis["rho2_over_D_max"]) / s
@@ -727,26 +807,16 @@ class ReplayPack:
             s=s_total,
             diffusivity=dict(walked=before.get("diffusivity", {}).get("walked", D0), replayed=wp.get("diffusivity")),
             b_max=dict(walked=before.get("b_max", {}).get("walked", b_max), served=acq.get("b_max")),
-            certificate="measured at the walked lengths; the view at b is the walk at s^2 b, served up to b_max / s^2")
+            certificate="measured at the walked lengths; the view at G is the walk at s G, served up to G_max / s")
         return type(self)(arrays, meta, source=self.source)
 
-    def _check_length_scale(self, waveform):
-        """Refuse a waveform beyond the envelope a length-scaled view serves (:meth:`at_length_scale`): the view at
-        ``b`` is the walk at ``s^2 b``, certified up to the walk's battery, so the view's
-        ``replay_envelope.acquisition.b_max`` is the walk's over ``s^2``, and a replay past it would return a
-        signal the certificate does not cover. A pack that is no view, or states no battery, is not judged here."""
-        ls = (self.meta.get("provenance") or {}).get("length_scaled")
-        b_max = ((self.meta.get("replay_envelope") or {}).get("acquisition") or {}).get("b_max")
-        if not ls or b_max is None:
-            return
-        b = float(np.max(np.asarray(waveform.b(), np.float64)))
-        if b > float(b_max) * (1.0 + 1e-9):
-            s = float(ls["s"])
-            raise ValueError(
-                f"b = {b:.3g} s/m^2 is beyond the {float(b_max):.3g} s/m^2 this length-scaled view serves: at s = {s:.4g} "
-                f"it reads the walk at s^2 b = {b * s * s:.3g}, and the walk's codec was certified up to b_max = "
-                f"{float(ls['b_max']['walked']):.3g} (replay_envelope.acquisition.b_max). Replay within the view's "
-                f"envelope, or walk the substrate at this size (dmipy-sim#542)")
+    def _check_envelope(self, waveform, field):
+        """The one check every replay route applies to a waveform against the pack's stated scanner class
+        (:func:`check_acquisition_envelope`): the per-axis gradient, the sampled slew, and the refocusing depth of
+        the field channel where ``field`` (the request's :class:`FieldTerm`) is active. A length-scaled view is held to
+        its moved limits by the same call. The field strength and the susceptibility reach their envelope in
+        :func:`field_term`, which the routes call with :attr:`field_envelope`."""
+        check_acquisition_envelope(self.meta, waveform, field_active=bool(field.active))
 
     def _at_tissue(self, tissue):
         """The pack a replay with ``tissue`` reads: this one, or its view at the tissue's diffusivity and
@@ -1230,7 +1300,6 @@ class ReplayPack:
         if not isinstance(waveform, ScannerSequence):
             raise TypeError(f"a replay takes a ScannerSequence (a bare gradient array says nothing about its pulses); "
                             f"got {type(waveform).__name__}")
-        self._check_length_scale(waveform)              # the view's battery first: its refusal names the cause
         self._check_band(waveform)
         G = np.asarray(waveform.G, np.float64)
         G_eff = np.asarray(waveform.G_eff, np.float64)
@@ -1246,6 +1315,7 @@ class ReplayPack:
         t = tissue if tissue is not None else Tissue()
         T2, T1, rho2, rho1, D = t.T2, t.T1, t.rho2, t.rho1, t.D
         field = field_term(self.susceptibility_field, tissue, scanner, self.field_envelope)   # the one rule of tissue chi x pack field x B0
+        self._check_envelope(waveform, field)
         if field.active and not self.has_field:
             raise ValueError(f"pack {self.meta.get('id')!r} declares its susceptibility field present and this replay "
                              "has a field term, but the pack holds no field channel (C3) here: read it with its field "
@@ -1365,6 +1435,7 @@ class ReplayPack:
         self._assert_windows_reach(T_acq)
         windows = self._windows()[:self._span(T_acq)[1]]
         field = field_term(self.susceptibility_field, tissue, scanner, self.field_envelope)
+        self._check_envelope(waveform, field)
         gate = waveform.effective_gate if waveform.gate is None else waveform.gate
         return self._read_plan(G_eff, float(waveform.dt), gate, windows, field, tol=tol, K=K, modes=modes)
 
