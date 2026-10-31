@@ -142,7 +142,6 @@ def _bloch_replay_terms(trajectory, h, G, dt_wf, rf_events, *, T2, T1, comp_traj
     pool's per block end and adds the bound pool's off-resonance precession by occupancy.
     """
     G = np.asarray(G, np.float64)
-    n_meas = G.shape[0]
     n_w, n_t, _ = trajectory.shape
     dt = float(h)
     edges, rotations, windows = _bloch_timeline(rf_events, n_t, dt, t0=t0)

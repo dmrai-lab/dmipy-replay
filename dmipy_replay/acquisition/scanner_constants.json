@@ -440,7 +440,7 @@
    "key": "fick2026_replayable_mc",
    "authors": "Fick R",
    "title": "Replayable Monte Carlo: walk once, replay every acquisition -- Sec. 'A pack is a band, and the band is set by the scanner': 'Its bandwidths at epsilon = 5e-3 are 520 Hz for Prisma, 311 Hz for Connectom at its diffusion-derated slew, 784 Hz for MAGNUS, 928 Hz for Connectome 2.0, 2.1 kHz for the Bruker BGA-9S and 2.3 kHz for the Micro2.5 insert' (figures/fig_band_data.py, eps 5e-3, a 100 ms window at 0.1 ms saves, D = 2e-9 m^2/s)",
-   "journal_or_publisher": "manuscript (dmrai-papers-private/replayable_mc)",
+   "journal_or_publisher": "manuscript",
    "year": 2026,
    "doi_or_url": null
   }

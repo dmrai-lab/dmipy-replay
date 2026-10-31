@@ -416,7 +416,6 @@ class Partition:
         term ``s``, so that an effective encoding with levels ``l`` on the terms has ``b = l^T B l`` (s/m^2) when it is
         refocused; exact (each ``Q_s`` is piecewise linear between the cell edges)."""
         from ..constants import GAMMA
-        S = np.asarray(self.segments, np.float64)
         pts = np.unique(np.concatenate([[0.0]] + [sh.edges(a, b) for sh, (a, b) in zip(self.shapes, self.segments)]))
         Q = np.stack([sh.running(pts, a, b) for sh, (a, b) in zip(self.shapes, self.segments)])
         L = np.diff(pts); qa, qb = Q[:, :-1], Q[:, 1:]

@@ -99,7 +99,7 @@ class Tissue:
         src = spec.field_source_pools
         kw = dict(T2=T2, T1=T1, rho2=(rhos.pop() if len(rhos) == 1 else None),
                   chi_iso=(src[0].susceptibility.chi_iso if src else None),
-                  chi_aniso=((src[0].susceptibility.chi_aniso or 0.0) if src else 0.0))
+                  chi_aniso=(0.0 if not src or src[0].susceptibility.chi_aniso is None else src[0].susceptibility.chi_aniso))   # a source that states no anisotropy is isotropic
         kw.update(overrides)
         return cls(**kw)
 

@@ -72,7 +72,6 @@ def events_label_at(events, start, t):
     out = np.array(start, copy=True)
     if events is None or events.n_events == 0:
         return out
-    w = np.repeat(np.arange(events.n_walkers), events.counts)
     sel = events.t <= float(t)
     if not sel.any():
         return out
