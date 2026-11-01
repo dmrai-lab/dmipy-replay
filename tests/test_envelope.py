@@ -115,6 +115,21 @@ def test_refocusing_pulses_beyond_the_field_channels_depth_are_refused():
     p.plan(over, tissue=dr.Tissue(), scanner=3.0)                         # no field term: the field channel is not read
 
 
+def test_the_refocusing_depth_of_a_windowed_pack_is_a_windows():
+    """A pack stored in windows certifies each window's field channel to its depth: a train is held to the pulses it
+    plays within one window, so a train across windows within the depth passes and one deeper in a window is refused."""
+    p = pack_of("field", max_refocusing_pulses=2)
+    T = (p.n_t - 1) * p.dt
+    meta = {**p.meta, "walk_params": {**p.meta["walk_params"], "windows": {**p.meta["walk_params"]["windows"], "n": 4, "T": T / 4}}}
+    across = dr.cpmg(8, T / 8)                                            # two pulses in each quarter
+    deep = dr.cpmg(4, T / 16)                                             # four pulses in the first quarter
+    check_acquisition_envelope(meta, across, field_active=True)
+    with pytest.raises(ValueError, match=r"plays 4 refocusing pulses within one .* ms storage window"):
+        check_acquisition_envelope(meta, deep, field_active=True)
+    with pytest.raises(ValueError, match="plays 8 refocusing pulses with a field term"):
+        check_acquisition_envelope(p.meta, across, field_active=True)    # one window: the whole train
+
+
 def test_a_field_strength_is_certified_over_the_range_up_to_the_largest_b0_list_entry():
     p = pack_of("field")
     assert p.envelope.B0_list == (3.0, 7.0)

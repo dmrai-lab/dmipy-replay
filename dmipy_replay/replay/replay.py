@@ -254,8 +254,9 @@ def check_acquisition_envelope(meta, waveform, *, field_active=False):
     * ``G_max``: the largest played gradient (:attr:`ScannerSequence.played_gradient`, the coils' own) on any axis,
       within :data:`GRADIENT_RTOL`.
     * ``max_refocusing_pulses``: where the pack stores a field channel and the request has a field term
-      (``field_active``), the schedule's refocusing pulses (:attr:`RFSchedule.n_refocusing`) at most the depth the
-      field channel is certified at.
+      (``field_active``), the schedule's refocusing pulses within any one storage window
+      (:attr:`RFSchedule.refocusing_times`, binned by ``walk_params.windows.T``; the whole schedule on a one-window
+      pack) at most the depth the field channel of a window is certified at.
 
     The waveform's band is held to ``band_hz`` where the band is measured, against the pack's bands
     (:meth:`ReplayPack._check_band`, :meth:`~dmipy_replay.replay.columnar.ColumnarPack.bands_for`). The field strength and
@@ -274,9 +275,14 @@ def check_acquisition_envelope(meta, waveform, *, field_active=False):
         raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {env.G_max:.4g} T/m per axis of "
                          f"the envelope {env.name!r} this pack is certified for{via}")
     if field_active and env.max_refocusing_pulses is not None:
-        n = waveform.rf.n_refocusing
+        t = waveform.rf.refocusing_times
+        win = (meta.get("walk_params") or {}).get("windows") or {}
+        per_window = int(win.get("n") or 1) > 1
+        n = int(np.bincount(np.floor(t / float(win["T"]) * (1.0 + 1e-12)).astype(np.int64)).max(initial=0)) if per_window and t.size \
+            else int(t.size)
         if n > env.max_refocusing_pulses:
-            raise ValueError(f"the waveform plays {n} refocusing pulses with a field term, beyond the "
+            where = f" within one {float(win['T']) * 1e3:.4g} ms storage window" if per_window else ""
+            raise ValueError(f"the waveform plays {n} refocusing pulses{where} with a field term, beyond the "
                              f"{env.max_refocusing_pulses} this pack's field channel is certified for "
                              "(replay_envelope.acquisition.max_refocusing_pulses)")
     return env

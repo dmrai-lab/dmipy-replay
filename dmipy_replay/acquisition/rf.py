@@ -565,7 +565,12 @@ class RFSchedule(tuple):
         """The number of refocusing pulses of the schedule: the pulses the coherence state machine reads as a
         refocus (a ``refocus`` label, or an unlabelled 180 while transverse). Excitation, store and recall are not
         counted."""
-        return sum(1 for _, role in self._roles()[0] if role == "refocus")
+        return len(self.refocusing_times)
+
+    @property
+    def refocusing_times(self):
+        """``(n,)`` the instants (s) of the schedule's refocusing pulses (:attr:`n_refocusing` of them), in time order."""
+        return np.array([e.t_s for e, role in self._roles()[0] if role == "refocus"], np.float64)
 
     def sign(self, t_grid):
         """The sign of the EFFECTIVE gradient over ``t_grid`` -- ``(len(t_grid),)`` of +-1: the spin-echo gate
