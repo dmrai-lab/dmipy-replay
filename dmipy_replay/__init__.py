@@ -31,6 +31,7 @@ from .replay.time_segments import TimeSegmentLayout
 from .replay.planning import ReadPlan
 from .phantom.grid import Grid
 from .replay import hub
+from ._blas import cap_cpu_threads
 
 __version__ = "0.1.0"
 
@@ -38,4 +39,4 @@ __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
-           "ReadPlan", "Grid", "hub"]
+           "ReadPlan", "Grid", "hub", "cap_cpu_threads"]

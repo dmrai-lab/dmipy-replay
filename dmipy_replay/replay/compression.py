@@ -401,6 +401,25 @@ def dequantise_bands(arrays, container, key, scale_key, dtype=np.float64):
 
 DEVICES = ("auto", "numpy", "jax")
 
+
+def _jax_has_gpu():
+    try:
+        import jax
+        return any(d.platform == "gpu" for d in jax.devices())
+    except Exception:                                                # no jax, or no backend
+        return False
+
+
+def resolve_device(device):
+    """``"numpy"`` or ``"jax"`` from a device word: ``"auto"`` is the JAX device when one is a GPU, else numpy
+    (a CPU JAX transform is no faster than scipy's)."""
+    if device not in DEVICES:
+        raise ValueError(f"device must be one of {DEVICES}, not {device!r}")
+    if device == "auto":
+        return "jax" if _jax_has_gpu() else "numpy"
+    return device
+
+
 CHUNK_BYTES = 1 << 30
 
 
