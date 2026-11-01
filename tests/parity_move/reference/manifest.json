@@ -1,0 +1,42 @@
+{
+ "cpu": "Intel(R) Core(TM) Ultra 7 155H",
+ "env": {
+  "CUDA_VISIBLE_DEVICES": "",
+  "DMIPY_REPLAY_CPU_THREADS": "1",
+  "DMIPY_SIM_CPU_THREADS": "1",
+  "JAX_PLATFORMS": "cpu",
+  "MKL_NUM_THREADS": "1",
+  "OMP_NUM_THREADS": "1",
+  "OPENBLAS_NUM_THREADS": "1",
+  "PYTHONHASHSEED": "0",
+  "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+ },
+ "libraries": {
+  "blas": [
+   {
+    "api": "openblas",
+    "arch": "Haswell",
+    "threads": 1,
+    "version": "0.3.34.106.0"
+   }
+  ],
+  "jax": "0.12.0.1",
+  "jaxlib": "0.12.0.1",
+  "numpy": "2.5.4",
+  "python": "3.12.3",
+  "scipy": "1.18.1",
+  "torch": "2.15.0+cpu"
+ },
+ "machine": "x86_64",
+ "packages": {
+  "dmipy-replay": {
+   "commit": "026c01507f60b36e986888ca35730e102d273da4",
+   "version": "0.1.0"
+  },
+  "dmipy-sim": {
+   "commit": "27bf4433db02fc6957da7d31dd6098fb9a47b138",
+   "version": "2.2.0"
+  }
+ },
+ "spelling": "before"
+}

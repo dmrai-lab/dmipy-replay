@@ -1,0 +1,352 @@
+{
+ "entries": {
+  "analytic/asymmetry": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "analytic/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "d926b4a0b0aecb0b6b3a6b7cf6c3d6292e1728e917052885a4cd471223d55ac5",
+   "shape": [
+    2,
+    25
+   ]
+  },
+  "analytic/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "analytic/floor": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "analytic/lmax": {
+   "kind": "int",
+   "value": 4
+  },
+  "analytic/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "6cce4a2db75dcbb6838640f10e21cc3db940758d26eda797a6a4f54c455d4efd",
+   "shape": [
+    2
+   ]
+  },
+  "analytic/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "analytic/nmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "analytic/phase_amplitude": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "analytic/route": {
+   "kind": "str",
+   "value": "analytic"
+  },
+  "closed_train/at": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "f45f068698f4189a28710f1993ac7517e8922468040f21f7ec4ed70575cdd266",
+   "shape": [
+    1
+   ]
+  },
+  "closed_train/at/b1": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "b1966c56a2a9f4f1edd3a07ce7f97c0d59a6012b8edf38f9a0803655f6528be8",
+   "shape": [
+    1
+   ]
+  },
+  "closed_train/repr": {
+   "kind": "str",
+   "value": "ClosedFormTrain(gates=5, echoes=3)"
+  },
+  "delivery/g0": {
+   "kind": "repr",
+   "value": "None"
+  },
+  "delivery/kappa": {
+   "kind": "repr",
+   "value": "None"
+  },
+  "delivery/levels": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "a0555e3c975d984fbc1ec8f2b0a145a2da0f9f468be85e95b7642803645bb571",
+   "shape": [
+    11,
+    2,
+    3
+   ]
+  },
+  "delivery/partition": {
+   "kind": "str",
+   "value": "box"
+  },
+  "delivery/q": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "94a1a91fdf8b918af9ee821a42f32d080901a93c779ec368236051b394af086d",
+   "shape": [
+    4,
+    11,
+    2,
+    3
+   ]
+  },
+  "delivery/voxels": {
+   "dtype": "<i8",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "a1e03200f1f82ad2c1cec8795c271aaecf98f5aa2d151d2229ec5fa0c177cf77",
+   "shape": [
+    4
+   ]
+  },
+  "frames/replay": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a13",
+   "sha256": "4a8aece361cd0d2bdbfb1d03f871e4badb01ca5cdfc9b1aa9abed4a45087916d",
+   "shape": [
+    2,
+    2,
+    1,
+    2
+   ]
+  },
+  "frames/replay_bloch/0": {
+   "dtype": "<i4",
+   "kind": "array",
+   "npz": "a14",
+   "sha256": "b823e8d586a488600c00e7e6040d4c3f33b6e811b6dafc8cc377a188db565e08",
+   "shape": [
+    4,
+    3
+   ]
+  },
+  "frames/replay_bloch/1": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a15",
+   "sha256": "bd6e7de978798fafbf3a5d2d02f102b86fa68908b082142bc5fd19d4efcd6f7e",
+   "shape": [
+    4,
+    2
+   ]
+  },
+  "odf/replay_train": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a16",
+   "sha256": "0e365618e63db69878507ca9bcf434df1c4588fb02549d50ac02d969deb6895b",
+   "shape": [
+    6,
+    6,
+    2,
+    1
+   ]
+  },
+  "odf/report/lmax": {
+   "kind": "int",
+   "value": 8
+  },
+  "odf/report/n_closed_forms": {
+   "kind": "int",
+   "value": 0
+  },
+  "odf/report/n_echoes": {
+   "kind": "int",
+   "value": 3
+  },
+  "odf/report/n_gates": {
+   "kind": "int",
+   "value": 5
+  },
+  "odf/report/n_offsets": {
+   "kind": "int",
+   "value": 1
+  },
+  "odf/report/n_pairs": {
+   "kind": "int",
+   "value": 1
+  },
+  "odf/report/n_scales": {
+   "kind": "int",
+   "value": 1
+  },
+  "odf/report/seconds": {
+   "kind": "str",
+   "value": "[\"bessel\", \"gates\", \"gather\", \"harmonics\", \"moments\"]"
+  },
+  "partition/n_voxels": {
+   "kind": "int",
+   "value": 4
+  },
+  "partition/replay": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a18",
+   "sha256": "435f91517402dc0dd963ecb0af08fbcc2a07c135b72e2f25ea628833d125f8d3",
+   "shape": [
+    2,
+    2,
+    1,
+    2
+   ]
+  },
+  "partition/voxel_index": {
+   "dtype": "<i8",
+   "kind": "array",
+   "npz": "a17",
+   "sha256": "bf539c569eca2a991984ea1d854354ff03454712f3be408900d71b0e9170cfb1",
+   "shape": [
+    4,
+    3
+   ]
+  },
+  "specimen_pose/asymmetry": {
+   "kind": "float",
+   "value": "8.044301247874646e-06"
+  },
+  "specimen_pose/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "9bb45df434cbcc91a4f1d7857cffca43998591686bd5d9952f5031c340121134",
+   "shape": [
+    1,
+    9139
+   ]
+  },
+  "specimen_pose/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "specimen_pose/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "specimen_pose/lmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "specimen_pose/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "ebbf56d4be18ad16d06795ad99dc3246fa04eed8700a9f3d9bbca5df13af3097",
+   "shape": [
+    1
+   ]
+  },
+  "specimen_pose/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "specimen_pose/nmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "specimen_pose/phase_amplitude": {
+   "kind": "float",
+   "value": "7.658085994210108"
+  },
+  "specimen_pose/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "watson/mode": {
+   "kind": "str",
+   "value": "odf_sh"
+  },
+  "watson/read/geometric_fraction": {
+   "dtype": "<f4",
+   "kind": "array",
+   "npz": "a12",
+   "sha256": "f6bb1294da2f78cd935b01c7656280df5eaa0439e9d97bc03775825a41a508e4",
+   "shape": [
+    4,
+    1
+   ]
+  },
+  "watson/read/n_voxels": {
+   "kind": "int",
+   "value": 4
+  },
+  "watson/read/replay": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "40ea2ce8b9046cd05a62bf753e2bd9c2ff38cd5ff4eb2b8221fe2a9d602d7d3c",
+   "shape": [
+    2,
+    2,
+    1,
+    2
+   ]
+  },
+  "watson/read/voxel_index": {
+   "dtype": "<i4",
+   "kind": "array",
+   "npz": "a11",
+   "sha256": "b823e8d586a488600c00e7e6040d4c3f33b6e811b6dafc8cc377a188db565e08",
+   "shape": [
+    4,
+    3
+   ]
+  },
+  "watson/replay": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "40ea2ce8b9046cd05a62bf753e2bd9c2ff38cd5ff4eb2b8221fe2a9d602d7d3c",
+   "shape": [
+    2,
+    2,
+    1,
+    2
+   ]
+  },
+  "watson/report/n_encoding_classes": {
+   "kind": "int",
+   "value": 1
+  },
+  "watson/report/responses": {
+   "kind": "str",
+   "value": "[{\"cls\": 0, \"field_lmax\": 0, \"lmax\": 8, \"n_bodies\": 1, \"nmax\": 0, \"route\": \"closed\", \"seconds\": \"<timing>\", \"substrate\": 0}]"
+  },
+  "watson/report/seconds": {
+   "kind": "str",
+   "value": "[\"bessel\", \"classes\", \"gather\", \"harmonics\", \"layers\", \"moments\"]"
+  },
+  "watson/rph/data": {
+   "kind": "str",
+   "value": "ab3e68f562518d345b53aa6af831a9a85ebe2accb1d91f47b1e9013094ffeaba"
+  },
+  "watson/rph/header": {
+   "kind": "str",
+   "value": "{\"__metadata__\": {\"rph\": \"{\\\"rph_schema_version\\\": \\\"0.4.2\\\", \\\"id\\\": \\\"parity/watson\\\", \\\"grid\\\": {\\\"shape\\\": [2, 2, 1], \\\"voxel_size_m\\\": [0.025, 0.025, 0.025], \\\"origin_m\\\": [-0.0125, -0.0125, -0.0], \\\"isocenter_m\\\": [0.0, 0.0, 0.0], \\\"frame\\\": \\\"RAS\\\", \\\"attach\\\": \\\"substrate\\\"}, \\\"orientation\\\": {\\\"mode\\\": \\\"odf_sh\\\", \\\"lmax\\\": 8, \\\"basis\\\": \\\"real\\\", \\\"convention\\\": \\\"orthonormal\\\"}, \\\"substrates\\\": [{\\\"id\\\": \\\"cyl\\\", \\\"kind\\\": \\\"pack\\\", \\\"m0\\\": 0.7, \\\"sha256\\\": \\\"c69019aa014adb1a2ac98c43b1c8b15f35f7515ac6621e5cc80a31b8cd9807cb\\\", \\\"embedded\\\": true, \\\"pack_meta\\\": {\\\"rpk_schema_version\\\": \\\"0.7\\\", \\\"id\\\": \\\"fixture/cylinder\\\", \\\"compression\\\": {\\\"method\\\": \\\"bridge_dst\\\", \\\"K\\\": 64, \\\"walker_preserving\\\": true, \\\"container\\\": [{\\\"bands\\\": [0, 8], \\\"bits\\\": 11}, {\\\"bands\\\": [8, 16], \\\"bits\\\": 7}, {\\\"bands\\\": [16, 40], \\\"bits\\\": 6}, {\\\"bands\\\": [40, 64], \\\"bits\\\": 5}], \\\"temporal_bandwidth_hz\\\": 800.0, \\\"precision_tiers\\\": {\\\"bytes_per_walker\\\": 216, \\\"fixed_bytes\\\": 1024, \\\"not_prefix_sliceable\\\": [\\\"blt_band_scale\\\", \\\"pos_band_scale\\\"], \\\"floor_at_full_n\\\": 0.04195068710996597, \\\"walkers_shuffled\\\": true, \\\"usable\\\": true, \\\"tiers\\\": [{\\\"eps\\\": 0.01, \\\"n_walkers\\\": 2000, \\\"bytes\\\": 433024, \\\"reachable\\\": false}, {\\\"eps\\\": 0.003, \\\"n_walkers\\\": 2000, \\\"bytes\\\": 433024, \\\"reachable\\\": false}, {\\\"eps\\\": 0.001, \\\"n_walkers\\\": 2000, \\\"bytes\\\": 433024, \\\"reachable\\\": false}], \\\"note\\\": \\\"prefix reads are unbiased\\\"}, \\\"channels\\\": {\\\"compartment\\\": {\\\"channel\\\": \\\"compartment\\\", \\\"columns\\\": [{\\\"name\\\": \\\"comp\\\", \\\"kind\\\": \\\"static\\\"}]}, \\\"boundary_local_time\\\": {\\\"channel\\\": \\\"boundary_local_time\\\", \\\"mode\\\": \\\"bridge_dst\\\", \\\"T\\\": 0.04, \\\"K\\\": 64, \\\"dtype\\\": \\\"bands\\\", \\\"container\\\": [{\\\"bands\\\": [0, 4], \\\"bits\\\": 6}, {\\\"bands\\\": [4, 6], \\\"bits\\\": 4}, {\\\"bands\\\": [6, 64], \\\"bits\\\": 3}]}}}, \\\"walk_params\\\": {\\\"n_walkers\\\": 2000, \\\"T_max\\\": 0.04, \\\"diffusivity\\\": 2e-09, \\\"seed\\\": 1, \\\"windows\\\": {\\\"n\\\": 1, \\\"T\\\": 0.04, \\\"walks\\\": [{\\\"first\\\": 0, \\\"last\\\": 0, \\\"seed\\\": 1}]}, \\\"block\\\": {\\\"h\\\": 0.00015936254980079682, \\\"m\\\": 3, \\\"precision\\\": \\\"float32\\\", \\\"n_blocks\\\": 251, \\\"rule\\\": \\\"derived\\\", \\\"ring\\\": 16, \\\"accumulation\\\": \\\"the moments of each block summed per step, a ring of 16 blocks projected in one float32 product, the rings chained into a float32 level-2 accumulator\\\", \\\"k0_residual_m\\\": 4.320099833421409e-12, \\\"k0_residual_relative\\\": 5.785018402093556e-07}, \\\"qv\\\": {\\\"positions\\\": [1.5390870650167088e-10, 1.5394375454946819e-10, 1.600132533488563e-10], \\\"local_time\\\": 2.404141122291925e-11}, \\\"substrate_frame\\\": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]}, \\\"replay_envelope\\\": {\\\"gradient\\\": true, \\\"bulk_relaxation\\\": true, \\\"surface_relaxivity\\\": true, \\\"field\\\": false, \\\"magnetization_transfer\\\": false, \\\"diffusivity_fixed\\\": true, \\\"acquisition\\\": {\\\"b_max\\\": 3000000000.0, \\\"ogse_periods\\\": [1, 2, 3, 5], \\\"B0_list\\\": [3.0, 7.0], \\\"note\\\": \\\"temporal band set by max OGSE period / min delta\\\", \\\"bound\\\": \\\"envelope\\\", \\\"name\\\": \\\"fixture\\\", \\\"band_hz\\\": 800.0, \\\"G_max\\\": 10.0}, \\\"tissue\\\": {\\\"rho2_over_D_max\\\": 50000.0}}, \\\"fidelity\\\": {\\\"metric\\\": \\\"max_abs_complex_signal_error\\\", \\\"certified\\\": \\\"measured\\\", \\\"measured_by\\\": \\\"walk_free_terms\\\", \\\"err_truncation\\\": 0.000612683, \\\"err_quadrature\\\": 4.97457e-11, \\\"err_quantisation\\\": 0.00141168, \\\"err_quadrature_surface\\\": 1.83291e-12, \\\"err_rounding\\\": 2.00399e-06, \\\"err_max\\\": 0.00202637, \\\"floor_max\\\": 0.0419507, \\\"noise_floor\\\": 0.0223607, \\\"floor_quantisation\\\": 0.00118814, \\\"floor_total_max\\\": 0.0431388, \\\"within_2x_floor\\\": true, \\\"per_family\\\": {\\\"OGSE1\\\": {\\\"err_max\\\": 3.7826e-05, \\\"floor_max\\\": 0.0361716}, \\\"OGSE2\\\": {\\\"err_max\\\": 0.000129593, \\\"floor_max\\\": 0.019396}, \\\"OGSE3\\\": {\\\"err_max\\\": 0.000308479, \\\"floor_max\\\": 0.0258063}, \\\"OGSE5\\\": {\\\"err_max\\\": 0.00202637, \\\"floor_max\\\": 0.0419507}, \\\"PGSE\\\": {\\\"err_max\\\": 2.97728e-05, \\\"floor_max\\\": 0.0312136}, \\\"SHORTD\\\": {\\\"err_max\\\": 0.000208047, \\\"floor_max\\\": 0.0368538}}, \\\"quadrature\\\": {\\\"m\\\": 3, \\\"h\\\": 0.000159363, \\\"f_band_hz\\\": 800.0, \\\"h_round\\\": null, \\\"qv_positions_m2\\\": [1.53909e-10, 1.53944e-10, 1.60013e-10], \\\"qv_contact_m2\\\": 2.40414e-11, \\\"surface_rho_over_D\\\": 50000.0, \\\"rel_at_band_edge\\\": 1.27745e-07}, \\\"bounds_diffusivity\\\": 2e-09, \\\"err_surface\\\": 7.49953e-05, \\\"floor_surface\\\": 0.000971171, \\\"surface_certified\\\": \\\"walk_free\\\", \\\"surface_rho2_list\\\": [1e-05, 3e-05, 0.0001], \\\"err_surface_quantisation\\\": 7.49953e-05, \\\"err_surface_truncation\\\": 0.0, \\\"err_surface_quadrature\\\": 1.83291e-12, \\\"terms\\\": {\\\"truncation\\\": 0.000612683, \\\"truncation_from\\\": \\\"band_variance\\\", \\\"quadrature\\\": {\\\"positions\\\": 4.97457e-11, \\\"local_time\\\": 1.83291e-12}, \\\"rounding\\\": 2.00399e-06}}, \\\"provenance\\\": {\\\"code\\\": {\\\"version\\\": \\\"2.2.0\\\", \\\"commit\\\": \\\"<commit>\\\"}, \\\"walk\\\": {\\\"kind\\\": \\\"coefficient\\\", \\\"stepping\\\": null}, \\\"envelope_stamp\\\": {\\\"rule\\\": \\\"scanner_class/1\\\", \\\"replaced\\\": {\\\"bound\\\": \\\"scanner_class\\\", \\\"scanner\\\": \\\"fixture\\\", \\\"G_max\\\": 10.0, \\\"slew_max\\\": 1000000000.0}}}, \\\"license\\\": \\\"CC-BY-4.0\\\", \\\"citation\\\": \\\"dmipy-replay fixture\\\", \\\"substrate\\\": {\\\"id\\\": \\\"analytic/cylinder\\\", \\\"domain\\\": {\\\"box_min\\\": [-8e-06, -8e-06, -8e-06], \\\"box_max\\\": [8e-06, 8e-06, 8e-06], \\\"boundary\\\": [\\\"open\\\", \\\"open\\\", \\\"open\\\"], \\\"surface_relaxivity\\\": 0.0}, \\\"pools\\\": [{\\\"id\\\": 0, \\\"name\\\": \\\"extra\\\", \\\"D\\\": null, \\\"water_fraction\\\": 0.0, \\\"T2\\\": null, \\\"T1\\\": null, \\\"susceptibility\\\": null}, {\\\"id\\\": 1, \\\"name\\\": \\\"intra\\\", \\\"D\\\": null, \\\"water_fraction\\\": 1.0, \\\"T2\\\": null, \\\"T1\\\": null, \\\"susceptibility\\\": null}], \\\"walls\\\": [{\\\"name\\\": \\\"membrane\\\", \\\"surface\\\": {\\\"kind\\\": \\\"cylinder\\\", \\\"center\\\": [0.0, 0.0, 0.0], \\\"radius\\\": 2e-06, \\\"axis\\\": [0.0, 0.0, 1.0]}, \\\"inside_pool\\\": 1, \\\"outside_pool\\\": null, \\\"permeability\\\": {\\\"in_to_out\\\": 0.0, \\\"out_to_in\\\": 0.0}, \\\"surface_relaxivity\\\": {\\\"inside\\\": 0.0, \\\"outside\\\": 0.0}, \\\"mt_reactivity\\\": {\\\"inside\\\": 0.0, \\\"outside\\\": 0.0}}], \\\"seeding\\\": {\\\"pools\\\": [1], \\\"rule\\\": \\\"uniform_by_volume\\\", \\\"weights\\\": \\\"water_fraction\\\", \\\"positions\\\": null}, \\\"validity\\\": {\\\"smallest_feature\\\": 2e-06, \\\"tiers\\\": [\\\"gradient\\\", \\\"surface\\\"], \\\"min_gap\\\": null, \\\"mesh_edge_feature_ratio\\\": null, \\\"thinnest_shell\\\": null}, \\\"frame\\\": {\\\"axis\\\": [0.0, 0.0, 1.0], \\\"in_plane\\\": null, \\\"source\\\": null}, \\\"description\\\": \\\"isolated cylinder; the outside is void unless permeable\\\", \\\"nominal_field_T\\\": null, \\\"request\\\": null, \\\"realisation\\\": null, \\\"provenance\\\": {\\\"source\\\": \\\"analytic\\\", \\\"constructor\\\": \\\"Cylinder\\\"}, \\\"substrate_spec_version\\\": \\\"0.1\\\"}}}, {\\\"id\\\": \\\"bg\\\", \\\"kind\\\": \\\"inert\\\", \\\"m0\\\": 0.0}], \\\"license\\\": \\\"CC0-1.0\\\", \\\"citation\\\": \\\"parity\\\"}\"}, \"geometric_fraction\": {\"dtype\": \"F32\", \"shape\": [4, 1], \"data_offsets\": [0, 16]}, \"odf_sh\": {\"dtype\": \"F32\", \"shape\": [4, 1, 45], \"data_offsets\": [16, 736]}, \"substrate0/blt_band_scale\": {\"dtype\": \"F32\", \"shape\": [1, 64], \"data_offsets\": [736, 992]}, \"substrate0/blt_endpoint\": {\"dtype\": \"F32\", \"shape\": [2000], \"data_offsets\": [992, 8992]}, \"substrate0/blt_start\": {\"dtype\": \"F32\", \"shape\": [2000], \"data_offsets\": [8992, 16992]}, \"substrate0/pos_band_scale\": {\"dtype\": \"F32\", \"shape\": [1, 3, 64], \"data_offsets\": [16992, 17760]}, \"substrate0/pos_x_ends\": {\"dtype\": \"F32\", \"shape\": [2000, 2], \"data_offsets\": [17760, 33760]}, \"substrate0/pos_y_ends\": {\"dtype\": \"F32\", \"shape\": [2000, 2], \"data_offsets\": [33760, 49760]}, \"substrate0/pos_z_ends\": {\"dtype\": \"F32\", \"shape\": [2000, 2], \"data_offsets\": [49760, 65760]}, \"substrate0/spin_weights\": {\"dtype\": \"F32\", \"shape\": [2000], \"data_offsets\": [65760, 73760]}, \"voxel_index\": {\"dtype\": \"I32\", \"shape\": [4, 3], \"data_offsets\": [73760, 73808]}, \"substrate_id\": {\"dtype\": \"I16\", \"shape\": [4, 1], \"data_offsets\": [73808, 73816]}, \"substrate0/comp_static\": {\"dtype\": \"I8\", \"shape\": [2000], \"data_offsets\": [73816, 75816]}, \"substrate0/blt_b0u6\": {\"dtype\": \"U8\", \"shape\": [2000, 3], \"data_offsets\": [75816, 81816]}, \"substrate0/blt_b1u4\": {\"dtype\": \"U8\", \"shape\": [2000, 1], \"data_offsets\": [81816, 83816]}, \"substrate0/blt_b2u3\": {\"dtype\": \"U8\", \"shape\": [2000, 22], \"data_offsets\": [83816, 127816]}, \"substrate0/pos_x_b0u11\": {\"dtype\": \"U8\", \"shape\": [2000, 11], \"data_offsets\": [127816, 149816]}, \"substrate0/pos_x_b1u7\": {\"dtype\": \"U8\", \"shape\": [2000, 7], \"data_offsets\": [149816, 163816]}, \"substrate0/pos_x_b2u6\": {\"dtype\": \"U8\", \"shape\": [2000, 18], \"data_offsets\": [163816, 199816]}, \"substrate0/pos_x_b3u5\": {\"dtype\": \"U8\", \"shape\": [2000, 15], \"data_offsets\": [199816, 229816]}, \"substrate0/pos_y_b0u11\": {\"dtype\": \"U8\", \"shape\": [2000, 11], \"data_offsets\": [229816, 251816]}, \"substrate0/pos_y_b1u7\": {\"dtype\": \"U8\", \"shape\": [2000, 7], \"data_offsets\": [251816, 265816]}, \"substrate0/pos_y_b2u6\": {\"dtype\": \"U8\", \"shape\": [2000, 18], \"data_offsets\": [265816, 301816]}, \"substrate0/pos_y_b3u5\": {\"dtype\": \"U8\", \"shape\": [2000, 15], \"data_offsets\": [301816, 331816]}, \"substrate0/pos_z_b0u11\": {\"dtype\": \"U8\", \"shape\": [2000, 11], \"data_offsets\": [331816, 353816]}, \"substrate0/pos_z_b1u7\": {\"dtype\": \"U8\", \"shape\": [2000, 7], \"data_offsets\": [353816, 367816]}, \"substrate0/pos_z_b2u6\": {\"dtype\": \"U8\", \"shape\": [2000, 18], \"data_offsets\": [367816, 403816]}, \"substrate0/pos_z_b3u5\": {\"dtype\": \"U8\", \"shape\": [2000, 15], \"data_offsets\": [403816, 433816]}}"
+  },
+  "watson/rph/header_bytes": {
+   "kind": "int",
+   "value": 9064
+  }
+ },
+ "seconds": 1.4319868090096861,
+ "status": "ok"
+}

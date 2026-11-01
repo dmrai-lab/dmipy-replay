@@ -1,0 +1,90 @@
+{
+ "entries": {
+  "cylinder/primitives/E": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "e631a630a2d3aeec3d8bf270fd28d514a569e8b6cd2c474dd77e48dd3074c909",
+   "shape": [
+    2000,
+    2
+   ]
+  },
+  "cylinder/primitives/ew": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "d65e547c775d3feaee3bad5e1b5c3dbcfc61e253432d6cb7de795e0b758908a4",
+   "shape": [
+    2000
+   ]
+  },
+  "cylinder/primitives/w": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "9c7d87294de0610ce1ba95775bb9e8ae510ec6e3b29772fa9d31f0a01fa99de3",
+   "shape": [
+    2000
+   ]
+  },
+  "cylinder/study": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "08eddc009ad56031c4058d815b06e26a7c0d07664f77c599b5215fe5a5058b41",
+   "shape": [
+    2,
+    3
+   ]
+  },
+  "cylinder/study/meta": {
+   "kind": "str",
+   "value": "{\"name\": null, \"pairs\": [{\"scanner\": null, \"tissue\": null}, {\"scanner\": null, \"tissue\": {\"T2\": {\"extra\": 0.07, \"intra\": 0.07}}}], \"protocol\": {\"acquisitions\": [{\"n_meas\": 2, \"name\": null, \"oriented\": false}, {\"n_meas\": 1, \"name\": null, \"oriented\": false}], \"name\": null}}"
+  },
+  "field/primitives/E": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "651634114ce91b91428399148b4106c7b63eb595ed19c7df56315b441813d286",
+   "shape": [
+    150,
+    2
+   ]
+  },
+  "field/primitives/ew": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "6332ab001cd9989be2095a92e26a13beabd0bea1cb98d033771fe6c04db2fd56",
+   "shape": [
+    150
+   ]
+  },
+  "field/primitives/w": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "4b8f1fdf84b712b0651b192a183f273d6a2bc0aa4df2d8b1d946f03c74c081b7",
+   "shape": [
+    150
+   ]
+  },
+  "field/study": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "514c0198ad127966fc4313fd8f9186c87b06a8fcc663795e83ac9fe014268474",
+   "shape": [
+    2,
+    3
+   ]
+  },
+  "field/study/meta": {
+   "kind": "str",
+   "value": "{\"name\": null, \"pairs\": [{\"scanner\": {\"field_T\": 3.0, \"name\": null}, \"tissue\": null}, {\"scanner\": {\"field_T\": 3.0, \"name\": null}, \"tissue\": {\"T1\": {\"extra\": 1.0, \"intra\": 1.2, \"myelin\": 0.44}, \"T2\": {\"extra\": 0.055, \"intra\": 0.05, \"myelin\": 0.01}, \"chi_aniso\": -1e-07, \"chi_iso\": -1e-07, \"rho2\": 1.16e-06}}], \"protocol\": {\"acquisitions\": [{\"n_meas\": 2, \"name\": null, \"oriented\": false}, {\"n_meas\": 1, \"name\": null, \"oriented\": false}], \"name\": null}}"
+  }
+ },
+ "seconds": 0.6089565089932876,
+ "status": "ok"
+}
