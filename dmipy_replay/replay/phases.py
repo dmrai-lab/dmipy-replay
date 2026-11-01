@@ -82,5 +82,6 @@ class Phases:
         out = {}
         with self._lock:
             for name, t0, t1 in self._phases:
-                out[name] = out.get(name, 0.0) + ((t1 or now) - t0)
+                spent = (t1 or now) - t0
+                out[name] = out[name] + spent if name in out else spent
         return out
