@@ -30,7 +30,8 @@ import math
 
 import numpy as np
 from numpy.polynomial.legendre import leggauss
-from scipy.special import erfi, iv as bessel_iv, lpmv
+
+from .._extras import need
 
 __all__ = ['watson_zonal_ratios', 'watson_sh', 'bingham_normalization', 'bingham_canonical_sh',
            'bingham_sh']
@@ -67,6 +68,8 @@ def watson_zonal_ratios(kappa, l_max=8):
     For kappa > 700 the direct recurrence overflows float64; the saddle-point
     asymptotic r_l ~ 1 - l(l+1)/(4 kappa) is used (rel. error O(1/kappa^2)).
     """
+    special = need("scipy.special")                            # the pose extra
+    erfi = special.erfi
     n_levels = l_max // 2 + 1
     r = np.zeros(n_levels)
     r[0] = 1.0
@@ -138,6 +141,8 @@ def bingham_normalization(k1, k2):
     modified Bessel function and what is left is a smooth one-dimensional integral, taken here on
     32 Gauss-Legendre nodes -- machine precision over any physical concentration.
     """
+    special = need("scipy.special")                            # the pose extra
+    bessel_iv = special.iv
     k1, k2 = float(k1), float(k2)
     nodes, weights = leggauss(32)
     s2 = 1.0 - nodes ** 2                                   # sin^2 of the polar angle
@@ -156,6 +161,9 @@ def bingham_canonical_sh(k1, k2, l_max=8):
     integral per coefficient. Only even ``l`` and even ``m >= 0`` survive, and ``c_0^0`` is exactly
     ``1/(2\sqrt\pi)``.
     """
+    special = need("scipy.special")                            # the pose extra
+    bessel_iv = special.iv
+    lpmv = special.lpmv
     k1, k2 = float(k1), float(k2)
     nodes, weights = leggauss(32)
     s2 = 1.0 - nodes ** 2

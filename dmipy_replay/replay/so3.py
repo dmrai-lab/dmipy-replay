@@ -37,6 +37,8 @@ import numpy as np
 
 from numpy.polynomial.legendre import leggauss
 
+from .._extras import need
+
 __all__ = ["real_sh", "sphere_quadrature", "n_sh_coeffs", "sh_block",
            "n_so3_coeffs", "so3_index", "wigner_blocks", "so3_design", "haar_design", "haar_rotations",
            "so3_quadrature",
@@ -275,7 +277,7 @@ def clebsch_gordan(l1, l2, L):
     """The complex Clebsch-Gordan matrix ``C[(m1, m2), M] = <l1 m1 l2 m2 | L M>``, by Racah's formula in log
     factorials, vectorised over ``(m1, m2)``: ``((2l1+1)(2l2+1), 2L+1)``, rows ``m1`` outer, ``m2`` inner, all
     indices from ``-l``."""
-    from scipy.special import gammaln
+    gammaln = need("scipy.special").gammaln               # the pose extra
     l1, l2, L = int(l1), int(l2), int(L)
     C = np.zeros(((2 * l1 + 1) * (2 * l2 + 1), 2 * L + 1))
     if L < abs(l1 - l2) or L > l1 + l2:
@@ -368,7 +370,7 @@ def coupling(l1, l2):
 # ------------------------------------------------------------------ sampling
 def haar_rotations(n, seed=0):
     """``(n, 3, 3)`` rotations drawn uniformly on SO(3)."""
-    from scipy.spatial.transform import Rotation
+    Rotation = need("scipy.spatial.transform").Rotation      # the pose extra
     return Rotation.random(int(n), random_state=int(seed)).as_matrix().reshape(int(n), 3, 3)
 
 
@@ -392,7 +394,7 @@ def rotate_sh(coeffs, R, lmax=None):
 
 def rotations_from_quaternions(q):
     """``(n, 3, 3)`` from ``(n, 4)`` quaternions in the ``(x, y, z, w)`` convention RPH.md 4 states."""
-    from scipy.spatial.transform import Rotation
+    Rotation = need("scipy.spatial.transform").Rotation      # the pose extra
     return Rotation.from_quat(np.asarray(q, np.float64).reshape(-1, 4)).as_matrix().reshape(-1, 3, 3)
 
 
