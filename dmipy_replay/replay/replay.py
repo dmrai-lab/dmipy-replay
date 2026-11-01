@@ -342,7 +342,8 @@ class ReplayPack:
 
     @staticmethod
     def _as_distribution(orientation):
-        """``orientation=`` as a distribution of poses, or None when it names a single pose."""
+        """``orientation=`` as a distribution of poses (a :class:`~dmipy_replay.replay.so3.Distribution`, or an
+        :class:`~dmipy_replay.replay.fod.FOD` read as an axis density), or None when it names a single pose."""
         return _as_distribution(orientation)
 
     def __init__(self, arrays, meta, source=None):
@@ -1250,6 +1251,59 @@ class ReplayPack:
         S = E[:, 0] if single else E
         return S if complex_signal else np.abs(S)
 
+    def pose_response(self, waveform, *, tissue=None, scanner=None, pose=None, compartment=None,
+                      method="auto", keep=None, cache=None, backend="numpy", device=None):
+        """The pack's response over every pose of its substrate, for one acquisition: a :class:`~dmipy_replay.replay.pose.PoseResponse` whose
+        coefficients a voxel's orientation distribution contracts against (RPH.md 6).
+
+        **Closed form, by default (#197).** For a single-direction encoding the response is a sum of plane waves in
+        each walker's rotated vector, and its harmonics are the Rayleigh expansion, computed per walker with no
+        rotation ever evaluated; with a field the response is that expansion times the field factor's, coupled
+        with the real Clebsch-Gordan tables. The band follows the walkers' phase amplitudes by construction and
+        nothing is chosen. ``keep = (lmax, nmax)`` restricts what is computed to what the composition retains: an
+        ODF or peaks composition keeps ``n = 0``, a frame keeps everything; ``None`` in either slot means the
+        response's own band.
+
+        **A magnet's own gradient** (``ScannerSequence.with_background_gradient``) is a second plane wave in each
+        walker's background vector, coupled to the first as the field factor is; the encoding beside it is what
+        must be one direction (dmrai-lab/dmipy-sim#565).
+
+        **The quadrature, by name.** An encoding whose moment matrix is not rank one -- a b-tensor or multi-axis
+        waveform -- has no plane-wave expansion, and takes the sampled route: the response evaluated on an SO(3)
+        quadrature sized to its phase amplitude, projected, and certified off the grid (``misfit``, a worst case).
+        ``method="quadrature"`` asks for it explicitly; ``method="closed"`` refuses what the closed form cannot
+        take rather than falling back. :attr:`PoseResponse.route` says which was used.
+
+        ``tissue`` and ``scanner`` are :meth:`replay`'s. The substrate's pose is not a knob here, since every pose
+        of it is what is being expanded; ``pose`` is the SPECIMEN's rigid rotation in the bore (a
+        :class:`~dmipy_replay.phantom.partition.Pose`; a bare matrix is ``Pose(R)``): the acquisition and the field turn into that
+        frame and the expansion runs there.
+
+        ``cache`` -- a directory (or ``True`` for ``$DMIPY_REPLAY_CACHE``, else ``~/.cache/dmipy-replay/pose``): the
+        expansion is written there under a key of the pack's digest, the acquisition on the pack's grid, the
+        resolved knobs, the frame, the method and the band, and read back instead of recomputed the next time
+        the same pack meets the same acquisition. Off unless asked for.
+
+        ``backend`` -- where the closed form's walker work runs: ``"numpy"`` on the host, ``"jax"`` on JAX's default
+        device, or ``"torch"`` on ``device`` (a torch device; CUDA when torch sees one, else its CPU), for a host that
+        has PyTorch and no JAX device (dmrai-lab/dmipy-sim#603). All compute the same expansion, its band and its
+        misfit, to float32 rounding; the quadrature route is the same on each. JAX and torch run only where they are
+        stated (the ``jax`` and ``torch`` extras); the expansion needs the ``pose`` extra (scipy).
+        """
+        return self.pose_responses([waveform], tissue=tissue, scanner=scanner, pose=pose, compartment=compartment,
+                                   method=method, keep=keep, cache=cache, backend=backend, device=device)[0]
+
+    def pose_responses(self, waveforms, *, tissue=None, scanner=None, pose=None, compartment=None,
+                       method="auto", keep=None, cache=None, backend="numpy", device=None):
+        """:meth:`pose_response` for a batch of acquisitions on this pack -- the encoding classes of a machine pass,
+        or one per voxel -- as one pass over the walkers per field factor: the closed form takes the single-direction
+        acquisitions of the batch that share a gate together (:func:`~dmipy_replay.replay.pose._pose_coeffs_closed_many`), the others take the
+        quadrature one by one. The knobs, the pose, the cache and the backend are as for :meth:`pose_response`;
+        returns one :class:`PoseResponse` per acquisition, in order (dmrai-lab/dmipy-sim#449)."""
+        from .pose import pose_responses
+        return pose_responses(self, waveforms, tissue=tissue, scanner=scanner, pose=pose, compartment=compartment,
+                              method=method, keep=keep, cache=cache, backend=backend, device=device)
+
     def _field_along_walk(self, P, n_s):
         """The susceptibility off-resonance each walker sees on this window's ``n_s`` block ends, the field's stored
         modes read there (sample 0 the field at the window's start, sample ``j`` its mean over block ``j``)."""
@@ -1888,11 +1942,13 @@ def _as_distribution(orientation):
     An :class:`~dmipy_replay.replay.fod.FOD` is read as an axis density with no statement about the substrate's own
     azimuth, which is what an ODF says.
     """
-    if orientation is None or isinstance(orientation, (list, tuple, np.ndarray)):
-        return None
-    raise NotImplementedError(f"orientation={type(orientation).__name__}: a distribution of poses is composed through the "
-                              "pose expansion, which this release does not carry yet; give one pose (a 3x3 rotation or "
-                              "the lab direction of the substrate's axis)")
+    from .fod import FOD
+    from .so3 import Distribution
+    if isinstance(orientation, Distribution):
+        return orientation
+    if isinstance(orientation, FOD):
+        return Distribution.axis_density(orientation)
+    return None
 
 
 def _duration(waveform):
@@ -1909,7 +1965,6 @@ def _echo_blocks(waveform, dt_pack):
         return None
     return [int(round(i * float(waveform.dt) / float(dt_pack))) for i in readout]
 
-_AXIS_MAPS = {}
 
 
 def compile_scheme(G, dt, K, gyromagnetic_ratio=GAMMA, *, T=None, method=None):
@@ -1960,13 +2015,9 @@ def truncation_budget(meta, *, floor, floor_source):
 
 CONTINUOUS_BAND_CAP = 64
 
-TORCH_GROUPS = 128
 
-SHELL_RTOL = 1e-3
 
-SHELL_SERIES_TOL = 1e-14
 
-SHELL_SERIES_MAX_PHASE = 10.0
 
 
 def _container_of(ranges):
