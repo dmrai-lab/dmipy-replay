@@ -277,10 +277,11 @@ def _report(rep):
 
 
 def _masked(meta):
-    """A pack's or a phantom's metadata with the producing code's commit masked: the move changes the commit that
-    writes a pack, and versions are frozen."""
+    """A pack's or a phantom's metadata without the producing code's commit: the move changes the commit that writes a
+    pack, and whether one is recorded at all (a package installed from a checkout records it, one installed from an
+    archive does not); versions are frozen."""
     if isinstance(meta, dict):
-        return {k: ("<commit>" if k == "commit" else _masked(v)) for k, v in meta.items()}
+        return {k: _masked(v) for k, v in meta.items() if k != "commit"}
     if isinstance(meta, list):
         return [_masked(v) for v in meta]
     return meta
@@ -288,7 +289,7 @@ def _masked(meta):
 
 def _file(path):
     """A safetensors file (a pack or a phantom) by its parts: the header in its order with every metadata string's
-    commit masked, and the sha256 of the data that follows it."""
+    commit left out (:func:`_masked`), and the sha256 of the data that follows it."""
     blob = Path(path).read_bytes()
     n = int.from_bytes(blob[:8], "little")
     header = json.loads(blob[8:8 + n])
@@ -298,7 +299,7 @@ def _file(path):
             md[k] = json.dumps(_masked(json.loads(v)))
         except ValueError:
             pass
-    return {"header": json.dumps(header), "header_bytes": n, "data": hashlib.sha256(blob[8 + n:]).hexdigest()}
+    return {"header": json.dumps(header), "data": hashlib.sha256(blob[8 + n:]).hexdigest()}
 
 
 def g08_phantom(api):
