@@ -33,10 +33,23 @@ from .phantom.grid import Grid
 from .replay import hub
 from ._blas import cap_cpu_threads
 
+_LAZY = {"Distribution": "replay.so3", "FOD": "replay.fod", "PoseResponse": "replay.pose",
+         "Acquisition": "replay.study", "StudyProtocol": "replay.study", "Study": "replay.study"}
+"""The names the pose replay and the study bring, imported from their modules when first read (PEP 562); the phantom
+classes are :mod:`dmipy_replay.phantom`'s."""
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+        return getattr(importlib.import_module(f"{__name__}.{_LAZY[name]}"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 __version__ = "0.1.0"
 
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
-           "ReadPlan", "Grid", "hub", "cap_cpu_threads"]
+           "ReadPlan", "Grid", "hub", "cap_cpu_threads", "Distribution", "FOD", "PoseResponse", "Acquisition",
+           "StudyProtocol", "Study"]
