@@ -22,14 +22,19 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 ENV = {
-    "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "DMIPY_SIM_CPU_THREADS": "1",
-    "DMIPY_REPLAY_CPU_THREADS": "1", "JAX_PLATFORMS": "cpu", "PYTHONHASHSEED": "0", "CUDA_VISIBLE_DEVICES": "",
+    "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "JAX_PLATFORMS": "cpu",
+    "PYTHONHASHSEED": "0", "CUDA_VISIBLE_DEVICES": "",
     "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1",
 }
+THREADS = {"before": "DMIPY_SIM_CPU_THREADS", "after": "DMIPY_REPLAY_CPU_THREADS"}
+"""The variable each spelling's packages read their CPU thread cap from (set to 1; the other one is unset)."""
 
 
-def _env(cache):
+def _env(cache, spelling):
     env = dict(os.environ, **ENV)
+    for s, var in THREADS.items():
+        env.pop(var, None)
+    env[THREADS[spelling]] = "1"
     for var in ("DMIPY_SIM_CACHE", "DMIPY_REPLAY_CACHE", "DMIPY_SIM_RUN_DIR"):
         env[var] = str(Path(cache) / var.lower())
     env["PYTHONPATH"] = os.pathsep.join([str(HERE), str(HERE.parent)] + [p for p in [env.get("PYTHONPATH")] if p])
@@ -153,7 +158,7 @@ except ImportError: pass
 print(json.dumps(info))
 """
     with tempfile.TemporaryDirectory() as cache:
-        env = _env(cache)
+        env = _env(cache, spelling)
         libs = json.loads(subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
                                          check=True).stdout)
     cpu = None
@@ -163,7 +168,7 @@ print(json.dumps(info))
         cpu = platform.processor() or None
     return {"spelling": spelling, "packages": {"dmipy-replay": _package("dmipy-replay", "dmipy_replay"),
                                                "dmipy-sim": _package("dmipy-sim", "dmipy_sim")},
-            "libraries": libs, "machine": platform.machine(), "cpu": cpu, "env": ENV}
+            "libraries": libs, "machine": platform.machine(), "cpu": cpu, "env": dict(ENV, **{THREADS[spelling]: "1"})}
 
 
 def record(out_dir, spelling, groups=None):
@@ -175,7 +180,7 @@ def record(out_dir, spelling, groups=None):
     for group in groups or list(calls.GROUPS):
         with tempfile.TemporaryDirectory() as cache:
             t0 = time.perf_counter()
-            r = subprocess.run([sys.executable, str(HERE / "parity.py"), "_child", group, spelling, str(out)], env=_env(cache),
+            r = subprocess.run([sys.executable, str(HERE / "parity.py"), "_child", group, spelling, str(out)], env=_env(cache, spelling),
                                capture_output=True, text=True)
             if r.returncode:
                 (out / f"{group}.json").write_text(json.dumps({"status": "failed", "stderr": r.stderr[-20000:]}, indent=1))
