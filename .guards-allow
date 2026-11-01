@@ -11,6 +11,8 @@ dmipy_replay/acquisition/scanners.py:d512c7bd1d pre-existing, tracked in dmrai-l
 dmipy_replay/phantom/grid.py:e555dfd99c pre-existing, tracked in dmrai-lab/dmipy-replay#7
 dmipy_replay/replay/_replay_kernel.py:0f06dd1a35 pre-existing, tracked in dmrai-lab/dmipy-replay#7
 dmipy_replay/replay/columnar.py:96c58f530b pre-existing, tracked in dmipy-sim#847
+dmipy_replay/replay/pathways.py:9dbdf45554 pre-existing, tracked in dmipy-sim#847
+dmipy_replay/replay/pathways.py:e3f31404c7 pre-existing, tracked in dmipy-sim#847
 dmipy_replay/replay/pose.py:2bff182daf pre-existing, tracked in dmipy-sim#847
 dmipy_replay/replay/pose.py:4977410db6 pre-existing, tracked in dmipy-sim#847
 dmipy_replay/replay/pose.py:ec1844e271 pre-existing, tracked in dmipy-sim#847
