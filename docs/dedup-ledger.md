@@ -25,7 +25,7 @@ the text is not sim's, so that a later sim change to a reader is brought here by
 | `replay/replay.py` | `replay/replay.py` | `read_rpk(cls=)`, the refusals, the field rule (`field_term(envelope=)`, `scanner_field`, `declared_susceptibility_field`), `truncation_budget`, `NUMERICAL_TERMS`, `_measured_mode_variance`, `ReplayPack`'s read, plan and replay methods (`open`, `arrays` / `decode_budget` / `release_decoded`, `plan`, `_read_plan`, `_full_plan`, `_mode_variance`, `field_envelope`, `truncation_budget`, `waveform_band`, `_check_band`, `walkers`, `replay(tol=, K=, modes=)` and the per-walker routes), `compile_scheme`, `replay_signal`, `replay_coefficients`, `surface_logweight` |
 | `replay/bank.py` | `replay/field.py` | `frame_from_axis`, `has_susc_path`, `susc_path_coeffs(modes=)`, `_susc_path_coeffs`, `_susc_path_names`, `_susc_path_expanded_names`, `path_mode_count`, `susc_path_field`, `susc_path_decode`, `path_field_integral(modes=)`, `_refuse_trace_component`, `_mode_sample_matrix` |
 | `fields/hollow_cylinder.py` | `replay/field.py` | `CHANNEL_NAMES`, `ISO_CHANNEL_NAMES`, `q_of_H`, `iso_P6`, `iso_weights`, `field_terms`, `contract` |
-| `replay/bank.py` | `replay/storage.py` | `STORAGE_BAND_MARGIN`, `storage_band_hz`, `mode_count` |
+| `replay/bank.py` | `replay/storage.py`, `replay/envelope.py` | `STORAGE_BAND_MARGIN`, `mode_count`; a class's band is `envelope_of` |
 | `replay/trajectories.py` | `replay/bloch.py` | `replay_bloch` (numpy) and its terms: `_rf_increment`, `finite_180_longitudinal_dwell`, `_BlochTerms`, `_bloch_timeline`, `_bloch_replay_terms`, `_bloch_replay_output` |
 | `engine/bloch.py` | `replay/bloch.py` | `_build_crusher` |
 | `coefficient_walk.py` | `replay/events.py` | `EventList`, `events_label_at`, `events_at_instants`, `events_within` |
@@ -64,7 +64,7 @@ the text is not sim's, so that a later sim change to a reader is brought here by
 8. `columnar.Source` reads one pinned commit on `urllib` and refuses a range request answered with anything but 206
    (retried, never sliced). `ColumnarPack.image` forms the voxel sums through `IMAGE_BACKENDS` (`"numpy"` here; sim
    adds `"jax"`, its default), takes `voxels=`, and `view` builds `pack_class` (sim sets its `ReplayPack`). Added
-   here: `plan_for_class` / `bands_for_class` and `pack_license`. `image_study` (a `Study`) is sim's.
+   here: `plan_for_envelope` / `bands_for_envelope` and `pack_license`. `image_study` (a `Study`) is sim's.
 9. `remote.RemotePack` reads ranges with `hub._get` at a commit resolved once (`revision=`, `main` by default; no
    `session=`), builds `pack_class` (sim sets its `ReplayPack`), and `load()` is `hub.fetch` at that commit.
 10. `time_segments.TimeSegmentLayout.image` / `tier_maps` run on a backend of `BACKENDS` (an object: `device`, `put`,
@@ -75,8 +75,8 @@ the text is not sim's, so that a later sim change to a reader is brought here by
     namespace (`w.__array_namespace__()`); torch tensors keep their branch.
 11. Module docstrings of `replay.py`, `bloch.py`, `events.py`, `field.py`, `so3.py`, `remote.py`, `time_segments.py`,
     `primitives.py` are written for the reader; `replay.__all__` lists what lives here.
-12. `acquisition/scanner_constants.json` names `dmipy_replay.replay.storage.storage_band_hz` where sim names
-    `dmipy_sim.replay.bank.storage_band_hz` (the storage rule lives in `replay/storage.py`).
+12. `acquisition/scanner_constants.json` names `dmipy_replay.replay.envelope.envelope_of`, where the class band rule
+    lives.
 
 ## Sim defects found on the way
 

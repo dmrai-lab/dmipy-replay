@@ -23,9 +23,9 @@ region and a law that does not is not a magnetic field. :data:`SCANNERS` is
 the replay band-limit certificate's class table (dmipy-replay #143), the same classes that size K per scanner, as a
 view of the catalogue: ``(G_max, slew_max)`` per class.
 
-A walk's resolution is the band's: the block the walk accumulates in and the step the step law resolves read the
-class's certified band (:func:`dmipy_replay.replay.bank.storage_band_hz`), never a save grid, and a field source is read
-at the interval a pilot's read series sets (:func:`dmipy_replay.engine.accumulate.field_read_of_pilot`).
+A walk's resolution is the band's: the block the walk accumulates in and the step the step law resolves read the band
+of the walk's envelope (:func:`dmipy_replay.replay.envelope.envelope_of` applies a class's certified band and the
+storage margin), never a save grid.
 """
 from dataclasses import dataclass
 
