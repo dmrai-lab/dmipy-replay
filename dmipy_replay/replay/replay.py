@@ -277,7 +277,7 @@ def check_acquisition_envelope(meta, waveform, *, field_active=False):
     if field_active and env.max_refocusing_pulses is not None:
         t = waveform.rf.refocusing_times
         win = (meta.get("walk_params") or {}).get("windows") or {}
-        per_window = int(win.get("n") or 1) > 1
+        per_window = win.get("n") is not None and int(win["n"]) > 1      # a header with no windows is one window
         n = int(np.bincount(np.floor(t / float(win["T"]) * (1.0 + 1e-12)).astype(np.int64)).max(initial=0)) if per_window and t.size \
             else int(t.size)
         if n > env.max_refocusing_pulses:
