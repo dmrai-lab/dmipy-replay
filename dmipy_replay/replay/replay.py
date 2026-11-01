@@ -309,6 +309,12 @@ def _numpy_bloch():
     return replay_bloch
 
 
+def _jax_bloch():
+    """The JAX vector-Bloch propagator (:func:`~dmipy_replay.replay.bloch_jax.replay_bloch_jax`), the ``jax`` extra."""
+    from .bloch_jax import replay_bloch_jax
+    return replay_bloch_jax
+
+
 def _pose_matrix(pose):
     """A specimen pose as a 3x3 rotation, from a matrix or an object with ``.rotation``; ``None`` stays ``None``."""
     if pose is None:
@@ -338,7 +344,7 @@ class ReplayPack:
         return open_columnar(uri, workers=workers)
 
     #: the vector-Bloch propagators by name: a factory returning the function (``bloch.replay_bloch``'s arguments)
-    BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch()}
+    BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch(), "jax": lambda: _jax_bloch()}
 
     @staticmethod
     def _as_distribution(orientation):
@@ -1111,8 +1117,8 @@ class ReplayPack:
         angle, which is not what a train does. ``crusher_seed`` draws those coordinates, so a replay of one
         pack and one sequence is reproducible.
 
-        ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS` (``"numpy"`` here, the reference; a
-        producer's subclass adds its device ones), all taking the same arguments.
+        ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS`: ``"numpy"``, the reference and the default, or
+        ``"jax"`` (the ``jax`` extra) where it is stated; both take the same arguments.
         """
         view = self._at_tissue(tissue)
         if view is not self:
@@ -1303,6 +1309,27 @@ class ReplayPack:
         from .pose import pose_responses
         return pose_responses(self, waveforms, tissue=tissue, scanner=scanner, pose=pose, compartment=compartment,
                               method=method, keep=keep, cache=cache, backend=backend, device=device)
+
+    def pose_series(self, waveforms, *, tissue=None, scanner=None, pose=None, compartment=None, keep=None, tol=1e-8,
+                    direction_tol=None, backend="numpy", device=None):
+        """The pose responses of a machine's encoding classes as one series (dmrai-lab/dmipy-sim#610): ONE pass over the
+        walkers for the whole set, then every class an evaluation. Returns a :class:`~dmipy_replay.replay.pose_series.PoseSeries`
+        whose :meth:`~dmipy_replay.replay.pose_series.PoseSeries.responses` are each class's :class:`PoseResponse`.
+
+        The classes of one timing class differ only in each row's amplitude and direction, the magnet's own gradient's
+        magnitude and direction, and each row's small departure from its commanded shape; the bodies of the closed form
+        depend on the amplitude and ``|g0|`` alone, so they are a Chebyshev series in both whose coefficients come from
+        the bodies at the series' nodes, and a class is that series at its own ``(amplitude, |g0|)`` with its exact lab
+        side. Every truncation and each row's departure is bounded and added to its misfit
+        (:mod:`~dmipy_replay.replay.pose_series` derives each bound).
+
+        ``waveforms`` -- the classes, an iterable read once (a generator keeps one composed class in memory at a time):
+        one timing class, refused by name otherwise. ``tissue``, ``scanner``, ``pose``, ``compartment``, ``keep``,
+        ``backend`` and ``device`` are :meth:`pose_responses`'; ``tol`` is each series' and band's truncation target,
+        ``direction_tol`` the largest departure a row may have from its shape (a tenth of the floor by default)."""
+        from .pose_series import pose_series
+        return pose_series(self, waveforms, tissue=tissue, scanner=scanner, pose=pose, compartment=compartment, keep=keep,
+                           tol=tol, direction_tol=direction_tol, backend=backend, device=device)
 
     def _field_along_walk(self, P, n_s):
         """The susceptibility off-resonance each walker sees on this window's ``n_s`` block ends, the field's stored
