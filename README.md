@@ -1,6 +1,6 @@
 # dmipy-replay
 
-The reader of Monte-Carlo diffusion-MRI replay packs: **numpy only, no walk, no GPU.**
+The reader of Monte-Carlo diffusion-MRI replay packs: **no walk, no GPU, numpy at its core.**
 
 A *replay pack* (`.rpk`, [replay-pack-spec](https://github.com/dmrai-lab/replay-pack-spec) RPK.md) stores what a
 Monte-Carlo walk leaves of every walker that no acquisition changes: its path as sine bands, the pool it is in, its
@@ -8,8 +8,8 @@ wall contact and the susceptibility field it read along the way. Every acquisiti
 the pack, including any gradient waveform, RF schedule and B1 scale, T2/T1 per pool, surface relaxivity, field
 strength and orientation. Packs live on the Hugging Face Hub under
 [SubstrateCommons](https://huggingface.co/SubstrateCommons). This package reads them: the Hub client, the pack
-container, the acquisition object and its readers (Pulseq, b-tables), the replay, and the layouts a whole grid of
-voxels is stored in.
+container, the acquisition object and its readers (Pulseq, b-tables), the replay, the pose replay over orientation
+distributions, the replay phantoms, and the layouts a whole grid of voxels is stored in.
 
 ```python
 import dmipy_replay as dr
@@ -32,6 +32,7 @@ licences.
 | surface relaxivity (transverse, longitudinal) | `tissue=dr.Tissue(rho2=, rho1=)` | C2 |
 | susceptibility field: B0, chi, its direction | `tissue=dr.Tissue(chi_iso=, chi_aniso=)`, `scanner=7.0` | C3 |
 | the substrate's pose | `orientation=` a 3x3 rotation or the lab direction of its axis | all |
+| a distribution of poses (Watson, Bingham, an FOD, every pose) | `orientation=dr.Distribution.watson(8.0)`, `dr.FOD.from_sh(c, basis=)`; `pack.pose_response(seq)` | all |
 | B1+ scale, finite / shaped pulses, pulse trains, off-resonance | `pack.replay_bloch(seq, b1_scale=0.9, off_resonance_T=)` | all |
 | a faster diffusivity, a smaller or larger substrate | `tissue=dr.Tissue(D=)`, `pack.at_length_scale(s)` | views |
 | one pool, every walker | `compartment=1`, `pack.walker_signals(seq)` | |
@@ -73,6 +74,22 @@ checked against the manifest's row at the same commit; a mismatch is refused. `R
 reads only a pack's leading storage windows. A token is read from `HF_TOKEN` or the Hub client's token file when
 present; public datasets need none.
 
+## Orientation distributions and phantoms
+
+A pack answers for one microstructure at any pose; a voxel holds a distribution of poses. `pack.pose_response(seq)`
+expands the pack's response over every pose of its substrate in the real Wigner basis (`dmipy_replay.replay.so3`), by
+the closed form (the per-walker Rayleigh expansion) or a quadrature, with its band and a certified misfit; a
+`Distribution` (one pose, an axis, a Watson, a Bingham, uniform) or an `FOD` composes against it by an inner product,
+which is what `replay(orientation=...)` does. `pack.pose_series(classes)` takes every encoding class of a machine in
+one pass over the walkers; `dmipy_replay.replay.pathways.train_response` an RF train as a sum of gates;
+`pack.study(Study(...))` a protocol on several tissues and scanners at once.
+
+A **replay phantom** (`.rph`, RPH.md) is a voxel grid that cites packs: `dmipy_replay.phantom.Phantom.compose(grid,
+fractions=, orientation=)` places packs and closed forms (`PackSubstrate`, `FreeWater`, `Inert`) in voxels with a pose
+per voxel (`Peaks`, `ODF`, `Watson`, `Frames`, `Fan`), `Phantom.partition(pack, grid)` cuts one walk into the voxels
+its walkers started in; `replay(seq, scanner=)`, `replay_train` and `replay_bloch` image it, with a machine's own
+field, gradient non-linearity and concomitant fields per voxel (`ScannerLimits`); `write` / `read` the file.
+
 ## Layouts of a whole grid
 
 - **The columnar layout** (`dr.ColumnarPack`, `ReplayPack.open("hf://owner/name/prefix")`): the walkers of a grid of
@@ -107,18 +124,23 @@ carries no timing, so `delta` and `Delta` are required; nothing fills them in fr
 
 ## Dependencies and licence
 
-`numpy`, nothing else. The `.rpk` container is read without the safetensors wheel (`dmipy_replay.replay.container`,
-the file mapped copy-on-write) and the Hub over plain HTTPS with the standard library.
+`numpy`, nothing else, for everything above but the pose expansion: `import dmipy_replay` loads numpy alone
+(`tests/test_light.py`). The `.rpk` and `.rph` containers are read and written without the safetensors wheel
+(`dmipy_replay.replay.container`, the file mapped copy-on-write) and the Hub over plain HTTPS with the standard library.
+The extras: `pose` (scipy, threadpoolctl: the pose expansion's special functions and rotations, and the CPU thread
+cap, `dr.cap_cpu_threads` / `DMIPY_REPLAY_CPU_THREADS`), `jax` and `torch` (the same arithmetic on another array
+library and device), `all`. Every route runs on numpy unless `backend="jax"` or `backend="torch"` is stated; a route
+whose extra is not installed is refused with its `pip install 'dmipy-replay[...]'`.
 
 The **code** is Apache-2.0. The **packs** carry their own terms in their headers (`pack_license`): the phantoms on
 SubstrateCommons are CC BY-NC-SA 4.0 or a commercial licence, and the canonical pores are CC BY 4.0.
 
 ## How this relates to dmipy-sim
 
-[dmipy-sim](https://github.com/dmrai-lab/dmipy-sim) walks the substrates and writes the packs and layouts; it
-imports this package for everything a reader does, so the acquisition object, the builders, the replay contraction,
-the plan and the layouts' readers are one implementation. dmipy-sim adds the producer's routes and the JAX and torch
-backends of the same arithmetic, and composes orientation distributions (FODs, Watson / Bingham dispersion) through
-its pose expansion. `tests/test_parity.py`, `tests/test_columnar.py` and `tests/test_time_segments.py` hold this
-package's reads to dmipy-sim's own reads of the same packs and layouts; `tools/make_fixtures.py`,
-`tools/make_columnar_fixtures.py` and `tools/make_segment_fixtures.py` (dev-only, need dmipy-sim) record them.
+[dmipy-sim](https://github.com/dmrai-lab/dmipy-sim) walks the substrates and writes the packs and layouts: the walk,
+the encoding, the certificate, publishing, and the operations that re-encode a pack (`truncate_pack`, `rewindow_pack`,
+`prefix_pack`, `extend_pack`). It imports this package for everything a reader does and re-exports none of it, so
+there is one `ReplayPack` and one implementation of every reading. `tests/test_parity.py`, `tests/test_columnar.py`
+and `tests/test_time_segments.py` hold this package's reads to dmipy-sim's own reads of the same packs and layouts
+(records taken at dmipy-sim `8d7b97f`, frozen); `tests/parity_move/` holds every route that came from dmipy-sim
+bit for bit to its outputs there.

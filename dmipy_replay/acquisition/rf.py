@@ -397,7 +397,7 @@ class RFEvent:
     ``chi_perp`` follows on the ``ScannerSequence`` that carries the schedule.
 
     :meth:`flip_split` is the one place a pulse becomes what a grid does with it; both rasterisers
-    (:func:`dmipy_replay.engine.bloch._build_rf_schedule`, :func:`dmipy_replay.replay.trajectories._bloch_timeline`)
+    (dmipy-sim's ``engine.bloch._build_rf_schedule``, dmipy-sim's ``replay.trajectories._bloch_timeline``)
     read it, so a hard pulse, a finite hard pulse and a shaped pulse are the same object at three settings.
     A sequence's pulses live in an :class:`RFSchedule`.
     """
@@ -686,7 +686,7 @@ class RFSchedule(tuple):
         ``sin^2(theta)``, a store tips the plane onto z as ``cos^2(theta)``, with ``theta`` running 0 to pi/2
         across the pulse; a 180 keeps the component along B1 transverse and swings the perpendicular one through
         z, ``1/2 + cos^2(theta)/2`` with ``theta`` 0 to pi -- a quarter of the pulse spent longitudinal in all,
-        the ensemble mean of :func:`dmipy_replay.replay.trajectories.finite_180_longitudinal_dwell`. The mask is
+        the ensemble mean of dmipy-sim's ``replay.trajectories.finite_180_longitudinal_dwell``. The mask is
         then float; a schedule of hard pulses keeps the binary one. It weighs relaxation; a phase accrues through
         :meth:`transverse_gate`.
         """

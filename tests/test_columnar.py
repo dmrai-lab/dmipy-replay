@@ -1,4 +1,4 @@
-"""The columnar reader against dmipy-sim's on the same layouts (``tools/make_columnar_fixtures.py``): the plan names
+"""The columnar reader against dmipy-sim's on the same layouts (``data/columnar_reference.json``, recorded at dmipy-sim ``8d7b97f`` and frozen): the plan names
 the same bands and bytes, the image is sim's to float64 rounding, a voxel subset reads only its rows, a scanner
 class plans its band, and the remote route reads the layout by byte range and refuses a server that ignores it."""
 import json

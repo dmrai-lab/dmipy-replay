@@ -785,8 +785,8 @@ class TimeSegmentLayout:
         in the substrate frame), or ``None`` when the group stores no field or the pair's field scales are both zero:
         ``(layout, scale, coef, n_iso)``, the stored channels of the basis's twelve (RPK.md 5.3: ``iso_local``,
         ``iso_P`` xx, yy, xy, xz, yz, ``aniso_G`` (6)) in that order, their places in the words, their scales and their
-        contraction weights in float64 -- :func:`~dmipy_replay.fields.hollow_cylinder.iso_weights` on the six isotropic
-        channels (``iso_P_zz`` folded in by the trace identity, never formed), :func:`~dmipy_replay.fields.hollow_cylinder.q_of_H`
+        contraction weights in float64 -- dmipy-sim's ``fields.hollow_cylinder.iso_weights`` on the six isotropic
+        channels (``iso_P_zz`` folded in by the trace identity, never formed), dmipy-sim's ``fields.hollow_cylinder.q_of_H``
         on the six anisotropic ones -- and how many of them are isotropic. A channel that rounds to zero on every row
         (not stored) contributes nothing."""
         from .field import iso_weights, q_of_H

@@ -162,15 +162,13 @@ class ColumnarPack:
     layout of every column (its parts), ``index`` the row range of every (voxel, pool), ``grid`` the certificate's
     grid, ``floor`` the certificate's median per-voxel floor.
 
-    :attr:`pack_class` is the class a :meth:`view` is (a producer's subclass of
-    :class:`~dmipy_replay.replay.replay.ReplayPack` sets its own), and :attr:`IMAGE_BACKENDS` the reductions
-    :meth:`image` can form its voxel sums with, ``"numpy"`` here."""
+    A :meth:`view` is a :class:`~dmipy_replay.replay.replay.ReplayPack`; :attr:`IMAGE_BACKENDS` are the reductions
+    :meth:`image` can form its voxel sums with, ``"numpy"`` (the default) and ``"jax"``."""
 
     IMAGE_BACKENDS = {"numpy": lambda: _numpy_voxel_sums, "jax": _jax_voxel_sums}
 
     def __init__(self, uri, *, revision="main", workers=8):
-        from .replay import ReplayPack, _refuse_predating
-        self.pack_class = ReplayPack
+        from .replay import _refuse_predating
         self.uri = uri; self.src = Source(uri, revision=revision, workers=workers)
         m = json.loads(self.src.text("manifest.json")); self.meta, self.columns = m["meta"], m["columns"]
         _refuse_predating(self.meta, uri, tensors=list(self.columns))
@@ -389,7 +387,7 @@ class ColumnarPack:
 
     # ---- views
     def view(self, *, K=None, modes=0, voxels=None, pools=None, contact=False, relaxation=True, ranges=None):
-        """A :attr:`pack_class` pack of the rows and bands asked for: ``K`` bands (rounded up to a stored group; the
+        """A :class:`~dmipy_replay.replay.replay.ReplayPack` of the rows and bands asked for: ``K`` bands (rounded up to a stored group; the
         pack's K when None), ``modes`` field modes (0: the field tier left out), the contact tier with ``contact``."""
         ranges = self.rows_of(voxels, pools) if ranges is None else ranges
         K = self.K if K is None else int(K)
@@ -422,7 +420,8 @@ class ColumnarPack:
                 meta["view"] = dict(field="unread")                    # the layout holds C3; this view reads none of it
         if not contact:
             meta["compression"]["channels"].pop("boundary_local_time", None)
-        return self.pack_class(arrays, meta)
+        from .replay import ReplayPack
+        return ReplayPack(arrays, meta)
 
     def row_groups(self, chunk_rows=2_000_000):
         """The index rows in groups of about ``chunk_rows`` rows, cut on (voxel, pool) boundaries: the groups

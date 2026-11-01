@@ -74,7 +74,7 @@ class Pool:
     susceptibility: Optional[Susceptibility] = None
 
 
-#: Containers a ``label_volume`` surface's ``format`` may name (`dmipy_replay.io.label_volume`).
+#: Containers a ``label_volume`` surface's ``format`` may name (dmipy-sim's ``io.label_volume``).
 LABEL_VOLUME_FORMATS = ("nrrd", "mhd", "nifti", "tiff", "hdf5", "amira")
 
 
@@ -134,7 +134,7 @@ class Domain:
 class Frame:
     axis: list = field(default_factory=lambda: [0.0, 0.0, 1.0])
     in_plane: Optional[list] = None
-    #: ``"structural"`` when :func:`dmipy_replay.spec.build.spec_of` derived ``axis`` from the substrate's own
+    #: ``"structural"`` when dmipy-sim's ``spec.build.spec_of`` derived ``axis`` from the substrate's own
     #: shape (a cylinder/curved-tube centerline, a strand/sphere-chain chord); absent/``None`` for a frame
     #: declared by hand. The bank checks the two differently (dmipy-replay#538): a structural frame against the
     #: shape it came from, a hand-declared one against the walk's own principal displacement axis (#194).
