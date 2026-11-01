@@ -906,6 +906,36 @@ class TimeSegmentLayout:
                              "(segment_rows(..., background=True))")
         return g
 
+    def delivery(self, sequence, scanner, grid=None, *, partition=None, to_scanner=None, nonlinearity=True, background=True,
+                 concomitant=True, transmit=True):
+        """What ``scanner`` (a :class:`~dmipy_replay.acquisition.scanners.ScannerLimits`) plays at every voxel with rows when
+        the layout's grid sits in its bore as ``grid`` says (the layout's own grid, whose isocenter is the grid centre,
+        when None; :meth:`~dmipy_replay.phantom.Grid.centred_at` moves it), for ``sequence`` on its stored partition:
+        :func:`~dmipy_replay.phantom.bore.delivered_vectors` of each segment's commanded plateau at :attr:`live_voxels`,
+        for :meth:`image`'s ``delivered``. The term switches are those of
+        :func:`~dmipy_replay.phantom.bore.delivered_gradient` and ``transmit``."""
+        from ..phantom.bore import delivered_vectors
+        grid = self.grid if grid is None else grid
+        if tuple(grid.shape) != tuple(self.grid.shape):
+            raise ValueError(f"the grid placed in the bore is the layout's own ({tuple(self.grid.shape)}), got {tuple(grid.shape)}")
+        name, L = self.fit(sequence, partition)
+        if not self.partitions[name].is_constant:
+            raise ValueError(f"partition {name!r} has shaped terms: a machine's delivered gradient (its Maxwell term is "
+                             "quadratic in the waveform) is one vector per constant segment, not per shape")
+        e = np.asarray(self.partitions[name].gate, np.float64)
+        plateau = L * np.where(e == 0.0, 0.0, e)[None, :, None]          # the commanded (physical) gradient: e = +-1
+        live = self.live_voxels
+        ijk = np.stack(np.unravel_index(live, tuple(self.grid.shape)), axis=1)
+        d = delivered_vectors(scanner, grid, plateau, e, voxels=ijk, to_scanner=to_scanner, nonlinearity=nonlinearity,
+                              background=background, concomitant=concomitant, transmit=transmit)
+        durations = self.partitions[name].durations
+        net = np.abs(np.einsum("vmsc,s->vmc", d.q, durations)).max(initial=0.0)
+        if net > _RTOL * (float(np.abs(d.q).max(initial=0.0)) or 1.0) * float(durations.sum()):
+            raise ValueError("the machine's delivered gradient leaves a net moment at the readout (a Maxwell term "
+                             "the encoding does not refocus, as a bipolar pair's does not): a segment vector is the path "
+                             "relative to the walker's start, which only a refocused encoding does not see")
+        return Delivered(partition=name, voxels=live, levels=L, q=d.q, g0=d.g0, kappa=d.kappa)
+
     def tier_maps(self, partition, tissue=None, scanner=None, *, backend=None, device=None, resident=True,
                   b0_direction=(0.0, 0.0, 1.0)):
         """Per-voxel means over the walkers, at the walk's weights, of what each tier multiplies into :meth:`image` on
