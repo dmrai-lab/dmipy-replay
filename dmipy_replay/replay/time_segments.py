@@ -54,7 +54,8 @@ word decoded where it is read, float32 phases written out as products, complex64
 and accumulator. ``tissue=`` / ``scanner=`` / ``b0_direction=`` turn the tiers into exactly
 :meth:`~dmipy_replay.replay.primitives.Primitives.reduction_terms`: the row weight ``amp exp(-tau_2 / T2_pool -
 tau_1 / T1_pool + (rho2 / D) c)`` and the phase ``B0 (chi_iso A + chi_aniso B)``. The arithmetic runs on a backend of
-:data:`BACKENDS` (``"numpy"`` here); a backend is the same arithmetic on another array library and device.
+:data:`BACKENDS` (``"numpy"``, the default; ``"jax"`` and ``"torch"`` where stated, the ``jax`` and ``torch`` extras,
+:mod:`~dmipy_replay.replay.time_segments_backends`); a backend is the same arithmetic on another array library and device.
 """
 from __future__ import annotations
 
@@ -568,7 +569,7 @@ class TimeSegmentLayout:
     TILES = 4096                                                        # tiles per device chunk (2^19 rows)
     MEAS = 64                                                           # measurements padded to a multiple
     #: the backends :meth:`image` and :meth:`tier_maps` run on, by name, and the one ``backend=None`` names
-    BACKENDS = None                                                     # set below: {"numpy": NumpyBackend()}
+    BACKENDS = None                                                     # set below: numpy, jax, torch
     DEFAULT_BACKEND = "numpy"
 
     def _backend(self, name):
@@ -1233,4 +1234,6 @@ class NumpyBackend:
     voxel_sums = staticmethod(_voxel_sums_numpy)
 
 
-TimeSegmentLayout.BACKENDS = {"numpy": NumpyBackend()}
+from .time_segments_backends import JaxBackend, TorchBackend  # noqa: E402  (they read this module's kernels)
+
+TimeSegmentLayout.BACKENDS = {"numpy": NumpyBackend(), "jax": JaxBackend(), "torch": TorchBackend()}

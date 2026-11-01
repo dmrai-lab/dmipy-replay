@@ -80,7 +80,7 @@ def test_the_tier_maps_are_sims(lay):
 
 def test_a_backend_it_does_not_have_is_refused_by_name(lay):
     with pytest.raises(ValueError, match="backend is one of"):
-        lay.image(ACQ["box"][1], backend="jax")
+        lay.image(ACQ["box"][1], backend="cupy")
 
 
 def test_a_waveform_off_the_stored_shapes_is_refused(lay):
