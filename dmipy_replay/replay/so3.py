@@ -318,13 +318,13 @@ COUPLING_CACHE_VERSION = 1
 
 
 def _coupling_cache_dir():
-    """Where the coupling tables persist between processes: ``$DMIPY_REPLAY_CACHE`` or ``~/.cache/dmipy_replay``, under
+    """Where the coupling tables persist between processes: ``$DMIPY_REPLAY_CACHE`` or ``~/.cache/dmipy-replay``, under
     ``so3``; ``None`` when ``$DMIPY_REPLAY_CACHE`` is ``0`` (no disk cache)."""
     import os
     root = os.environ.get("DMIPY_REPLAY_CACHE")
     if root == "0":
         return None
-    return os.path.join(root or os.path.join(os.path.expanduser("~"), ".cache", "dmipy_replay"), "so3")
+    return os.path.join(root or os.path.join(os.path.expanduser("~"), ".cache", "dmipy-replay"), "so3")
 
 
 @functools.lru_cache(maxsize=2048)
