@@ -1,0 +1,108 @@
+{
+ "entries": {
+  "named/asymmetry": {
+   "kind": "float",
+   "value": "3.2703951475374665e-06"
+  },
+  "named/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "70e9551f2f5e74f61d0f97e5564595484fc314582d340bc352b90e4e4ec634f7",
+   "shape": [
+    1,
+    286
+   ]
+  },
+  "named/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "named/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "named/lmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "named/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "fbe83beaef6d8ca929b91390bb53c83876617e4576328789b091f184d6f0f1a1",
+   "shape": [
+    1
+   ]
+  },
+  "named/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "named/nmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "named/phase_amplitude": {
+   "kind": "float",
+   "value": "2.7155783333743058"
+  },
+  "named/route": {
+   "kind": "str",
+   "value": "quadrature"
+  },
+  "tensor/asymmetry": {
+   "kind": "float",
+   "value": "4.998613372914891e-08"
+  },
+  "tensor/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "a4ff24edc9a9dcaca77dfbbeea5cb992c82629aceca3c4b335e2f88cac1cc9bd",
+   "shape": [
+    1,
+    84
+   ]
+  },
+  "tensor/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "tensor/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "tensor/lmax": {
+   "kind": "int",
+   "value": 3
+  },
+  "tensor/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "8b7bdea33e5d4138c4f0a24af4e018d57e4c7357cd2938b1e9a3cd0006702e45",
+   "shape": [
+    1
+   ]
+  },
+  "tensor/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "tensor/nmax": {
+   "kind": "int",
+   "value": 3
+  },
+  "tensor/phase_amplitude": {
+   "kind": "float",
+   "value": "0.15722776299572852"
+  },
+  "tensor/route": {
+   "kind": "str",
+   "value": "quadrature"
+  }
+ },
+ "seconds": 1.2790472409978975,
+ "status": "ok"
+}

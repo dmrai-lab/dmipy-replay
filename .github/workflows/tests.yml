@@ -41,3 +41,32 @@ jobs:
           pip install -e ".[test]" "numpy==2.0.0"
       - name: Test
         run: pytest -q
+
+  parity-move:
+    # The replay move (dmrai-lab/dmipy-sim#834) is checked value for value: the calls of tests/parity_move recorded with
+    # dmipy-replay and dmipy-sim at the commits before the move (reference/manifest.json names them), then the same
+    # calls on this commit, both on this runner (a sum's last bit is the BLAS build's and the CPU's, so a record is
+    # compared only with one taken in its own environment). The committed reference is compared with this runner's
+    # record for information.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the packages before the move
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          ref() { python -c "import json, sys; print(json.load(open('tests/parity_move/reference/manifest.json'))['packages'][sys.argv[1]]['commit'])" "$1"; }
+          pip install "dmipy-replay @ git+https://github.com/dmrai-lab/dmipy-replay@$(ref dmipy-replay)"
+          pip install "dmipy-sim @ git+https://github.com/dmrai-lab/dmipy-sim@$(ref dmipy-sim)" safetensors
+      - name: Record before the move
+        run: python tests/parity_move/record_reference.py "$RUNNER_TEMP/before"
+      - name: The committed reference against this runner's record
+        run: python tests/parity_move/check_reference.py tests/parity_move/reference --against "$RUNNER_TEMP/before" || echo "::notice title=parity-move::the committed reference differs from this runner's record (another environment)"
+      - name: Install this commit
+        run: pip install --no-deps -e .
+      - name: Check this commit against the record
+        run: python tests/parity_move/check_reference.py "$RUNNER_TEMP/before"

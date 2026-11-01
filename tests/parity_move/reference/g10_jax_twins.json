@@ -1,0 +1,43 @@
+{
+ "entries": {
+  "replay_batch_jax": {
+   "dtype": "<f4",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "2e10395e3ccbede93d29e2b9722f6374c5d769f03cba3b6dc2a50fd3c5329b13",
+   "shape": [
+    2,
+    2
+   ]
+  },
+  "replay_bloch/jax": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "3ad5eb4ad2fefdff6f40ed46a41f9a86acb151d44d86495abf407d64a3285502",
+   "shape": [
+    2
+   ]
+  },
+  "replay_bloch/numpy": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "587b099a4324d454f5fcc439be2dfdbfaa4dbd90f015d3e8796053ebe2dda695",
+   "shape": [
+    2
+   ]
+  },
+  "replay_signal_jax": {
+   "dtype": "<c8",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "930efe94cd5f8d299b690dce1bf48b3d58286acb70b7ac5e56ecf8c3e204f123",
+   "shape": [
+    2
+   ]
+  }
+ },
+ "seconds": 1.7865122939983848,
+ "status": "ok"
+}

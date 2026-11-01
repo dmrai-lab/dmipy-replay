@@ -1,0 +1,465 @@
+{
+ "entries": {
+  "cylinder/bare/asymmetry": {
+   "kind": "float",
+   "value": "8.044301157670758e-06"
+  },
+  "cylinder/bare/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "03dbd984fa09ef92db49080393eeb13767e1af8e476747b90eba9aea399cf064",
+   "shape": [
+    1,
+    9139
+   ]
+  },
+  "cylinder/bare/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "cylinder/bare/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "cylinder/bare/lmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/bare/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "e8d2964273c9b399b28ae6e442d0bbc3b7ab29b1c77a0d6b32e3867fdb39b431",
+   "shape": [
+    1
+   ]
+  },
+  "cylinder/bare/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "cylinder/bare/nmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/bare/phase_amplitude": {
+   "kind": "float",
+   "value": "7.6580859623644075"
+  },
+  "cylinder/bare/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "cylinder/keep40/asymmetry": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "cylinder/keep40/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "2410a264048377f6835747ceefb73cbbcdbb1664d91dd4cb7e0c7c3bce061f48",
+   "shape": [
+    1,
+    25
+   ]
+  },
+  "cylinder/keep40/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "cylinder/keep40/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "cylinder/keep40/lmax": {
+   "kind": "int",
+   "value": 4
+  },
+  "cylinder/keep40/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "e8d2964273c9b399b28ae6e442d0bbc3b7ab29b1c77a0d6b32e3867fdb39b431",
+   "shape": [
+    1
+   ]
+  },
+  "cylinder/keep40/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "cylinder/keep40/nmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "cylinder/keep40/phase_amplitude": {
+   "kind": "float",
+   "value": "7.6580859623644075"
+  },
+  "cylinder/keep40/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "cylinder/nominal/asymmetry": {
+   "kind": "float",
+   "value": "8.044301157670758e-06"
+  },
+  "cylinder/nominal/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "03dbd984fa09ef92db49080393eeb13767e1af8e476747b90eba9aea399cf064",
+   "shape": [
+    1,
+    9139
+   ]
+  },
+  "cylinder/nominal/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "cylinder/nominal/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "cylinder/nominal/lmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/nominal/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "e8d2964273c9b399b28ae6e442d0bbc3b7ab29b1c77a0d6b32e3867fdb39b431",
+   "shape": [
+    1
+   ]
+  },
+  "cylinder/nominal/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "cylinder/nominal/nmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/nominal/phase_amplitude": {
+   "kind": "float",
+   "value": "7.6580859623644075"
+  },
+  "cylinder/nominal/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "cylinder/torch/asymmetry": {
+   "kind": "float",
+   "value": "8.044294887315951e-06"
+  },
+  "cylinder/torch/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "dba944e452d31ab89119ae78fe09b6c10a745132acfa2499d4881f10251f69f6",
+   "shape": [
+    1,
+    9139
+   ]
+  },
+  "cylinder/torch/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "cylinder/torch/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "cylinder/torch/lmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/torch/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "ebad7f592c0c1a32dc0e8067368eebab91a40d88afc5e3b23ca38d4a33520f07",
+   "shape": [
+    1
+   ]
+  },
+  "cylinder/torch/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "cylinder/torch/nmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "cylinder/torch/phase_amplitude": {
+   "kind": "float",
+   "value": "7.658085962364408"
+  },
+  "cylinder/torch/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "field/chi/asymmetry": {
+   "kind": "float",
+   "value": "0.0011009503034734454"
+  },
+  "field/chi/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a16",
+   "sha256": "00903adc5c9977d1b7cc14386b660407275ad092c10ebf1c871efb762ea441a2",
+   "shape": [
+    1,
+    5456
+   ]
+  },
+  "field/chi/field_lmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "field/chi/floor": {
+   "kind": "float",
+   "value": "0.08164965809277261"
+  },
+  "field/chi/lmax": {
+   "kind": "int",
+   "value": 15
+  },
+  "field/chi/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a17",
+   "sha256": "b4e6ba08a2df38138ee1b3b21a4457d796b971ef7eb1c7fe9e9273932523e71b",
+   "shape": [
+    1
+   ]
+  },
+  "field/chi/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "field/chi/nmax": {
+   "kind": "int",
+   "value": 15
+  },
+  "field/chi/phase_amplitude": {
+   "kind": "float",
+   "value": "2.1946278885537867"
+  },
+  "field/chi/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "permeable/bare/asymmetry": {
+   "kind": "float",
+   "value": "0.001241287721672251"
+  },
+  "permeable/bare/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "719d667165a42b0cb43b4733c9775056799a9ec2537ae2f7a4c718310bf12ca8",
+   "shape": [
+    1,
+    12341
+   ]
+  },
+  "permeable/bare/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "permeable/bare/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "permeable/bare/lmax": {
+   "kind": "int",
+   "value": 20
+  },
+  "permeable/bare/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "a54f396e8440c4768549c18b42c4a85eb1b6b754e64f685d6255f3b7b1db9df1",
+   "shape": [
+    1
+   ]
+  },
+  "permeable/bare/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "permeable/bare/nmax": {
+   "kind": "int",
+   "value": 20
+  },
+  "permeable/bare/phase_amplitude": {
+   "kind": "float",
+   "value": "8.892954175105196"
+  },
+  "permeable/bare/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "permeable/compartment0/asymmetry": {
+   "kind": "float",
+   "value": "0.001241287721672251"
+  },
+  "permeable/compartment0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "719d667165a42b0cb43b4733c9775056799a9ec2537ae2f7a4c718310bf12ca8",
+   "shape": [
+    1,
+    12341
+   ]
+  },
+  "permeable/compartment0/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "permeable/compartment0/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "permeable/compartment0/lmax": {
+   "kind": "int",
+   "value": 20
+  },
+  "permeable/compartment0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a11",
+   "sha256": "a54f396e8440c4768549c18b42c4a85eb1b6b754e64f685d6255f3b7b1db9df1",
+   "shape": [
+    1
+   ]
+  },
+  "permeable/compartment0/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "permeable/compartment0/nmax": {
+   "kind": "int",
+   "value": 20
+  },
+  "permeable/compartment0/phase_amplitude": {
+   "kind": "float",
+   "value": "8.892954175105196"
+  },
+  "permeable/compartment0/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "windows/bare/asymmetry": {
+   "kind": "float",
+   "value": "4.743258707736833e-06"
+  },
+  "windows/bare/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a12",
+   "sha256": "7299a603af7ec8de4d48f82d6e87c4cec0fa57de96ae26cab2336617eda0b1b0",
+   "shape": [
+    1,
+    7770
+   ]
+  },
+  "windows/bare/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "windows/bare/floor": {
+   "kind": "float",
+   "value": "0.040824829046386304"
+  },
+  "windows/bare/lmax": {
+   "kind": "int",
+   "value": 17
+  },
+  "windows/bare/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a13",
+   "sha256": "9da7dbad9d54478172fa91d1f40a491de74c60bd33d4bf27e5c6dc4b3934c056",
+   "shape": [
+    1
+   ]
+  },
+  "windows/bare/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "windows/bare/nmax": {
+   "kind": "int",
+   "value": 17
+  },
+  "windows/bare/phase_amplitude": {
+   "kind": "float",
+   "value": "6.476516973164295"
+  },
+  "windows/bare/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "windows/both/asymmetry": {
+   "kind": "float",
+   "value": "2.9119940996576895e-07"
+  },
+  "windows/both/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a14",
+   "sha256": "9c663729c802d1ba60db11dfbef7b406f3f166610f56e6264432b4b787446892",
+   "shape": [
+    1,
+    7770
+   ]
+  },
+  "windows/both/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "windows/both/floor": {
+   "kind": "float",
+   "value": "0.040824829046386304"
+  },
+  "windows/both/lmax": {
+   "kind": "int",
+   "value": 17
+  },
+  "windows/both/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a15",
+   "sha256": "75d81cf573350999e574653ff448c9868d728cf3248543a9f07dc4b016a588c1",
+   "shape": [
+    1
+   ]
+  },
+  "windows/both/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "windows/both/nmax": {
+   "kind": "int",
+   "value": 17
+  },
+  "windows/both/phase_amplitude": {
+   "kind": "float",
+   "value": "6.273147381178243"
+  },
+  "windows/both/route": {
+   "kind": "str",
+   "value": "closed"
+  }
+ },
+ "seconds": 1.7119060019904282,
+ "status": "ok"
+}

@@ -1,0 +1,660 @@
+{
+ "entries": {
+  "batch/0/asymmetry": {
+   "kind": "float",
+   "value": "8.044301157670853e-06"
+  },
+  "batch/0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "37691393c2d200543f9d610d4d5650e8ce383b1c3bf63220d9667b0d931fbcab",
+   "shape": [
+    1,
+    16215
+   ]
+  },
+  "batch/0/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "batch/0/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "batch/0/lmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "ce379696461c3b91be758e3617f1f1ee86e9653daa740a7042f7d409c6360bd2",
+   "shape": [
+    1
+   ]
+  },
+  "batch/0/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "batch/0/nmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/0/phase_amplitude": {
+   "kind": "float",
+   "value": "7.6580859623644075"
+  },
+  "batch/0/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "batch/1/asymmetry": {
+   "kind": "float",
+   "value": "2.0819134240180466e-05"
+  },
+  "batch/1/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "4f1d4efe7967a7dda104a3804d13606b7c2ba52fd527d581bf632ad4cab9e9a5",
+   "shape": [
+    1,
+    16215
+   ]
+  },
+  "batch/1/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "batch/1/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "batch/1/lmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/1/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "50d521f643ef5c9aba2cb4218759987654ccc91757a114227426ff72214aaa2a",
+   "shape": [
+    1
+   ]
+  },
+  "batch/1/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "batch/1/nmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/1/phase_amplitude": {
+   "kind": "float",
+   "value": "10.83016930679211"
+  },
+  "batch/1/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "batch/2/asymmetry": {
+   "kind": "float",
+   "value": "3.2706634390052045e-06"
+  },
+  "batch/2/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "7bae84e289a9b6d4f0a783adc491c6e6b205e97c275dd2816390feda03cd9622",
+   "shape": [
+    1,
+    16215
+   ]
+  },
+  "batch/2/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "batch/2/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "batch/2/lmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/2/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "3d26da94d223cd20d3f24c0a593f34676635a97bed5970b283a4fe3f4a509b9d",
+   "shape": [
+    1
+   ]
+  },
+  "batch/2/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "batch/2/nmax": {
+   "kind": "int",
+   "value": 22
+  },
+  "batch/2/phase_amplitude": {
+   "kind": "float",
+   "value": "5.415084348387646"
+  },
+  "batch/2/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "field_series/0/asymmetry": {
+   "kind": "float",
+   "value": "6.774319320676877e-06"
+  },
+  "field_series/0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a18",
+   "sha256": "9d4bdefa237f538205bfadf46a730c8aa738e48308d09dad6db81a4c8f98a8d1",
+   "shape": [
+    1,
+    1330
+   ]
+  },
+  "field_series/0/field_lmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "field_series/0/floor": {
+   "kind": "float",
+   "value": "0.08164965809277261"
+  },
+  "field_series/0/lmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a19",
+   "sha256": "ff926842bc23fa3778b5eb4413770ce466ffa2873109229d1028ca3b2569e41d",
+   "shape": [
+    1
+   ]
+  },
+  "field_series/0/n_bodies": {
+   "kind": "int",
+   "value": 2
+  },
+  "field_series/0/nmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/0/phase_amplitude": {
+   "kind": "float",
+   "value": "0.1597802362201214"
+  },
+  "field_series/0/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "field_series/1/asymmetry": {
+   "kind": "float",
+   "value": "4.613874770958022e-06"
+  },
+  "field_series/1/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a20",
+   "sha256": "926bc8008cae6eb9723ee4eefa49c5ad42a4db6bbc866216f10b2f4109e5283f",
+   "shape": [
+    1,
+    1330
+   ]
+  },
+  "field_series/1/field_lmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "field_series/1/floor": {
+   "kind": "float",
+   "value": "0.08164965809277261"
+  },
+  "field_series/1/lmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/1/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a21",
+   "sha256": "cbfb923b719a3ec75a146e3f40b4365125b9a39b2f68d0181c8af5eae0d64ee1",
+   "shape": [
+    1
+   ]
+  },
+  "field_series/1/n_bodies": {
+   "kind": "int",
+   "value": 2
+  },
+  "field_series/1/nmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/1/phase_amplitude": {
+   "kind": "float",
+   "value": "0.12782419552247626"
+  },
+  "field_series/1/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "field_series/2/asymmetry": {
+   "kind": "float",
+   "value": "6.774120791112096e-06"
+  },
+  "field_series/2/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a22",
+   "sha256": "b7273a0fb55a25422ad13452bb7890f657da739c2429994b9029151ca98931e7",
+   "shape": [
+    1,
+    1330
+   ]
+  },
+  "field_series/2/field_lmax": {
+   "kind": "int",
+   "value": 5
+  },
+  "field_series/2/floor": {
+   "kind": "float",
+   "value": "0.08164965809277261"
+  },
+  "field_series/2/lmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/2/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a23",
+   "sha256": "978a960c4750ce067f5ebaf9f6c6b5a527fed31551aa3d240ad4c6a2039a2916",
+   "shape": [
+    1
+   ]
+  },
+  "field_series/2/n_bodies": {
+   "kind": "int",
+   "value": 2
+  },
+  "field_series/2/nmax": {
+   "kind": "int",
+   "value": 9
+  },
+  "field_series/2/phase_amplitude": {
+   "kind": "float",
+   "value": "0.1597802370204719"
+  },
+  "field_series/2/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "field_series/bounds/background": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "field_series/bounds/band": {
+   "kind": "float",
+   "value": "2.560336430520356e-09"
+  },
+  "field_series/bounds/departure": {
+   "kind": "float",
+   "value": "1.1498561656112592e-10"
+  },
+  "field_series/bounds/floor": {
+   "dtype": "<f8",
+   "kind": "scalar",
+   "value": "0.08164965809277261"
+  },
+  "field_series/bounds/series_a": {
+   "kind": "float",
+   "value": "4.456766190540904e-12"
+  },
+  "series/0/asymmetry": {
+   "kind": "float",
+   "value": "7.266870141916787e-07"
+  },
+  "series/0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "402971d7784f6ab75b86b28f80f530d8c81aa2a5fb5ec4bc7c3a7d59ff7c3bd5",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series/0/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series/0/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series/0/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "9d03585798bcc7e4ab0c8450bfe215b1513df9b04214e422c62e29379b2b6457",
+   "shape": [
+    2
+   ]
+  },
+  "series/0/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series/0/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/0/phase_amplitude": {
+   "kind": "float",
+   "value": "3.4072365690668076"
+  },
+  "series/0/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "series/1/asymmetry": {
+   "kind": "float",
+   "value": "4.5445850308870444e-07"
+  },
+  "series/1/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "650d32e63a77dd72d497759a1cac28b701157718ff62d68c49f5d76d8c728daa",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series/1/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series/1/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series/1/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/1/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "cd5ec7357e56a2c629e23c5b2365332370c74a5563343708a85208004648fc87",
+   "shape": [
+    2
+   ]
+  },
+  "series/1/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series/1/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/1/phase_amplitude": {
+   "kind": "float",
+   "value": "2.725789405047518"
+  },
+  "series/1/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "series/2/asymmetry": {
+   "kind": "float",
+   "value": "7.266870025598853e-07"
+  },
+  "series/2/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "538b14344cd0b40624b939308093d2d693bd485ad4911717fe0c03e94d8fed58",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series/2/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series/2/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series/2/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/2/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a11",
+   "sha256": "161146ed027667e83c2553534696323b907c77f69314763c068383039d3dd595",
+   "shape": [
+    2
+   ]
+  },
+  "series/2/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series/2/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series/2/phase_amplitude": {
+   "kind": "float",
+   "value": "3.4072365867933088"
+  },
+  "series/2/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "series/bounds/background": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "series/bounds/band": {
+   "kind": "float",
+   "value": "8.319959153888942e-09"
+  },
+  "series/bounds/departure": {
+   "kind": "float",
+   "value": "5.114521994392812e-10"
+  },
+  "series/bounds/floor": {
+   "dtype": "<f8",
+   "kind": "scalar",
+   "value": "0.022360679774997897"
+  },
+  "series/bounds/series_a": {
+   "kind": "float",
+   "value": "2.240383483100586e-11"
+  },
+  "series_torch/0/asymmetry": {
+   "kind": "float",
+   "value": "7.266868236752644e-07"
+  },
+  "series_torch/0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a12",
+   "sha256": "d3929264c0b3cf799a966e63a7d366025fa530e33a67fb49de0f5a49d527f238",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series_torch/0/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series_torch/0/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series_torch/0/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a13",
+   "sha256": "44fad4cf8f0e0ea056726e337bd6bd8087d2134d676ce01a0f2ed4d90920469a",
+   "shape": [
+    2
+   ]
+  },
+  "series_torch/0/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series_torch/0/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/0/phase_amplitude": {
+   "kind": "float",
+   "value": "3.4072365690668054"
+  },
+  "series_torch/0/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "series_torch/1/asymmetry": {
+   "kind": "float",
+   "value": "4.5445887213785794e-07"
+  },
+  "series_torch/1/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a14",
+   "sha256": "7aa0637b33b13259ba459cc3d52e772c2c48db9bd4307679e13901a0e5712174",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series_torch/1/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series_torch/1/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series_torch/1/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/1/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a15",
+   "sha256": "a0aa5af6f74e5b84e17e50b6561e2df40bec4ea81bd604a8dcbff15e8387cd8e",
+   "shape": [
+    2
+   ]
+  },
+  "series_torch/1/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series_torch/1/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/1/phase_amplitude": {
+   "kind": "float",
+   "value": "2.7257894050475144"
+  },
+  "series_torch/1/route": {
+   "kind": "str",
+   "value": "series"
+  },
+  "series_torch/2/asymmetry": {
+   "kind": "float",
+   "value": "7.266868166772605e-07"
+  },
+  "series_torch/2/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a16",
+   "sha256": "bb8ab95385c062d41e6b4a2ac2022424016355786c01183c6ba5dd43e130a417",
+   "shape": [
+    2,
+    2300
+   ]
+  },
+  "series_torch/2/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "series_torch/2/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "series_torch/2/lmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/2/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a17",
+   "sha256": "d277b2a1b025e683db89c75dcfa04ac407052250bdeae4e20c77c7d6a7946805",
+   "shape": [
+    2
+   ]
+  },
+  "series_torch/2/n_bodies": {
+   "kind": "int",
+   "value": 4
+  },
+  "series_torch/2/nmax": {
+   "kind": "int",
+   "value": 11
+  },
+  "series_torch/2/phase_amplitude": {
+   "kind": "float",
+   "value": "3.4072365867933017"
+  },
+  "series_torch/2/route": {
+   "kind": "str",
+   "value": "series"
+  }
+ },
+ "seconds": 2.0167216190020554,
+ "status": "ok"
+}
