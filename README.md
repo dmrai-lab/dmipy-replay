@@ -37,11 +37,13 @@ licences.
 | one pool, every walker | `compartment=1`, `pack.walker_signals(seq)` | |
 
 A pack replays only the tiers it carries and **refuses** a knob outside them by name. It never returns a
-plausible number in place of one it cannot compute. Each pack states the envelope it is certified over: a waveform
-whose band truncation would cost more than the pack's stated numerical cap less its other certified terms
-(`pack.truncation_budget`) is refused, naming the band it needs (`pack.waveform_band(seq)`), and so is a field
-strength or susceptibility beyond the certified field scale (`pack.field_envelope`) or a relaxivity beyond the contact
-envelope.
+plausible number in place of one it cannot compute. Each pack states the envelope it is certified over,
+`pack.envelope` (a `dr.Envelope`, in physical terms: the temporal band `band_hz`, the per-axis amplitude `G_max`, the
+field strengths, susceptibility scale, refocusing depth and surface relaxivity; `dr.envelope_of("prisma")` is a
+scanner class's). A waveform that needs more band than `band_hz` (`pack.waveform_band(seq)`, at the pack's stated
+numerical cap less its other certified terms, `pack.truncation_budget`) or plays more than `G_max` on an axis is
+refused by name, and so is a field strength or susceptibility beyond the certified field scale (`pack.field_envelope`)
+or a relaxivity beyond the contact envelope.
 
 ## Plan before read
 
@@ -74,8 +76,8 @@ present; public datasets need none.
 ## Layouts of a whole grid
 
 - **The columnar layout** (`dr.ColumnarPack`, `ReplayPack.open("hf://owner/name/prefix")`): the walkers of a grid of
-  voxels in columns, read by reference over HTTP range requests. `plan(seq)` and `plan_for_class("prisma")` say which
-  bands, field modes, tiers, rows and bytes an acquisition (or every waveform a scanner class can play) needs before
+  voxels in columns, read by reference over HTTP range requests. `plan(seq)` and `plan_for_envelope(envelope_of("prisma"))` say
+  which bands, field modes, tiers, rows and bytes an acquisition (or every waveform inside an envelope) needs before
   any transfer; `view(K=, voxels=)` is an ordinary `ReplayPack` of those rows; `image(seq)` replays the whole grid
   in one pass over the rows.
 - **The time-segment layout** (`dmipy_replay.replay.time_segments.TimeSegmentLayout`): a walk contracted once

@@ -56,17 +56,19 @@ def test_a_voxel_subset_reads_only_its_rows():
     assert np.isnan(part[1, 0, 0]).all()
 
 
-def test_a_scanner_class_plans_its_band():
-    from dmipy_replay.replay.storage import mode_count
+def test_an_envelope_plans_its_band():
     lay = open_columnar(str(DATA / "columnar_quant"))
     for scanner in ("prisma", "connectome_2"):
-        need = mode_count(lay.T_window, scanner)
+        env = dr.envelope_of(scanner)
+        need = env.mode_count(lay.T_window)
         if need > lay.K:
             with pytest.raises(ValueError, match="narrower band"):
-                lay.plan_for_class(scanner)
+                lay.plan_for_envelope(env)
         else:
-            p = lay.plan_for_class(scanner)
+            p = lay.plan_for_envelope(env)
             assert p["K"] == min(g for g in lay.band_groups if g >= need)
+    with pytest.raises(TypeError, match="takes an Envelope"):
+        lay.plan_for_envelope("prisma")
 
 
 @pytest.fixture

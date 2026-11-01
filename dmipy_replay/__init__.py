@@ -24,6 +24,7 @@ from .sequences.btable import from_btable
 from .spec.tissue import Tissue
 from .spec.substrate import SubstrateSpec
 from .replay.replay import ReplayPack, read_rpk, compile_scheme
+from .replay.envelope import Envelope, envelope_of
 from .replay.columnar import ColumnarPack, open_columnar
 from .replay.remote import RemotePack
 from .replay.time_segments import TimeSegmentLayout
@@ -36,5 +37,5 @@ __version__ = "0.1.0"
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
-           "ReplayPack", "read_rpk", "compile_scheme", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
+           "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
            "ReadPlan", "Grid", "hub"]

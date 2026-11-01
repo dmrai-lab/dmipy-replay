@@ -7,7 +7,7 @@ downloaded whole, and every byte fetched is one the replay uses.
 
     pack = open_columnar("hf://SubstrateCommons/disco-replay/disco")
     plan = pack.plan(seq, tissue=..., scanner=...)            # bands, modes, tiers, bytes: before any transfer
-    plan = pack.plan_for_class("prisma")                       # what every waveform a Prisma can play needs
+    plan = pack.plan_for_envelope(envelope_of("prisma"))       # what every waveform a Prisma can play needs
     view = pack.view(K=32, voxels=[(20, 20, 20)])              # one voxel's rows at 32 bands: an ordinary ReplayPack
     S, floor, plan = pack.image([seq], settings=[(None, None), (tissue, 3.0)])   # every setting's volume, one pass
 
@@ -193,37 +193,48 @@ class ColumnarPack:
         floor on every measurement, and that truncation's bound, by the rule of :mod:`~dmipy_replay.replay.planning`
         (:func:`~dmipy_replay.replay.planning.band_tail` and :func:`~dmipy_replay.replay.planning.fewest`): the stored bands
         between ``K'`` and ``K`` at the manifest's per-band variance of the worst populated voxel, and the bands beyond
-        ``K`` (never stored) at the free bridge's variance at the walk's diffusivity, in closed form to infinity
+        the layout's envelope (its ``band_hz``, at most the ``K`` it stores; never read) at the free bridge's variance at
+        the walk's diffusivity, in closed form to infinity
         (:func:`~dmipy_replay.replay.compression.band_phase_variances`), which bounds every restricted walk's. A waveform
-        whose cost at the full ``K`` exceeds :attr:`truncation_budget` is refused by name; the walk is not read."""
+        whose cost there exceeds :attr:`truncation_budget` is refused by name; the walk is not read."""
+        from .envelope import Envelope
         from .planning import band_tail, fewest
         from .compression import band_phase_variances
-        K = self.K
+        env = Envelope.from_header(self.meta)
+        K = min(self.K, env.mode_count(self.T_window))
         G = np.asarray(seq.G_eff, np.float64)
         D = self.meta["walk_params"].get("diffusivity")
         if D is None:
             raise ValueError("the layout records no diffusivity, so the truncation beyond its stored bands cannot be bounded")
         pb, total = band_phase_variances(G, float(seq.dt), self.T_window, K, float(D))
-        beyond = 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)                  # the bands never stored, per measurement
+        beyond = 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)                  # the bands never read, per measurement
         budget = self.truncation_budget
         if beyond.max() > budget["budget"]:
-            raise ValueError(f"the waveform's gradient reaches beyond this layout's temporal band: the {K} stored bands "
-                             f"({K / (2.0 * self.T_window):.4g} Hz) leave up to {beyond.max():.2e} of the signal in phase the layout "
-                             f"does not carry, against the {budget['budget']:.2e} it may cost (its cap {budget['cap']:.2e} from "
-                             f"{budget['cap_source']} less {budget['other_terms']:.2e} of other certified terms)")
+            raise ValueError(f"the waveform's gradient reaches beyond this layout's temporal band: the {K} bands of its "
+                             f"envelope {env.name!r} ({K / (2.0 * self.T_window):.4g} Hz) leave up to {beyond.max():.2e} of the "
+                             f"signal in phase the layout does not carry, against the {budget['budget']:.2e} it may cost (its "
+                             f"cap {budget['cap']:.2e} from {budget['cap_source']} less {budget['other_terms']:.2e} of other "
+                             "certified terms)")
         var = np.asarray(self.meta["columnar"].get("band_variance_max") or self.meta["columnar"]["band_variance"], np.float64).T   # (K, 3)
-        tail = (band_tail(G, seq.dt, [(self.T_window, None)], var) + beyond[:, None]).max(axis=0)
-        return fewest(tail, self.band_groups, tol * self.floor)
+        tail = (band_tail(G, seq.dt, [(self.T_window, None)], var[:K]) + beyond[:, None]).max(axis=0)
+        return fewest(tail, [g for g in self.band_groups if g <= K] or [K], tol * self.floor)
 
-    def bands_for_class(self, scanner):
-        """``K'``: the fewest stored band groups holding the storage rule's band for scanner class ``scanner``
-        (:func:`~dmipy_replay.replay.storage.mode_count` over one window) -- what every waveform that class can
-        play needs, whatever the waveform. A class whose band is wider than the layout stores is refused by name."""
-        from .storage import mode_count
-        need = mode_count(self.T_window, scanner)
-        if need > self.K:
-            raise ValueError(f"scanner class {scanner!r} needs {need} bands per {self.T_window * 1e3:.4g} ms window and "
-                             f"this layout stores {self.K}: it was built for a class with a narrower band")
+    def bands_for_envelope(self, envelope):
+        """``K'``: the fewest stored band groups holding the band of ``envelope`` (an
+        :class:`~dmipy_replay.replay.envelope.Envelope`, :func:`~dmipy_replay.replay.envelope.envelope_of` for a scanner
+        class) over one window -- what every waveform inside it needs, whatever the waveform. An envelope whose band is
+        wider than the layout's own is refused by name."""
+        from .envelope import Envelope
+        if not isinstance(envelope, Envelope):
+            raise TypeError(f"bands_for_envelope takes an Envelope (envelope_of(scanner) for a scanner class); got "
+                            f"{type(envelope).__name__}")
+        own = Envelope.from_header(self.meta)
+        need = envelope.mode_count(self.T_window)
+        have = min(self.K, own.mode_count(self.T_window))
+        if need > have:
+            raise ValueError(f"the envelope {envelope.name!r} needs {need} bands per {self.T_window * 1e3:.4g} ms window "
+                             f"({envelope.band_hz:.4g} Hz) and this layout is certified for {have} (its envelope "
+                             f"{own.name!r}, {own.band_hz:.4g} Hz): it was built for a narrower band")
         return int(next(g for g in self.band_groups if g >= need))
 
     def modes_for(self, seq, scanner, tissue, tol=0.25):
@@ -256,7 +267,7 @@ class ColumnarPack:
 
     def plan(self, seq, *, tissue=None, scanner=None, tol=0.25, voxels=None):
         """What a replay of ``seq`` reads: bands, field modes, tiers, rows and bytes -- before any byte moves. A
-        waveform outside the scanner class the layout is certified for is refused first
+        waveform outside the envelope the layout is certified for is refused first
         (:func:`~dmipy_replay.replay.replay.check_acquisition_envelope`)."""
         from .replay import check_acquisition_envelope, field_envelope_of, field_term
         f = field_term(self.susceptibility_field, tissue, scanner, field_envelope_of(self.meta))
@@ -264,12 +275,13 @@ class ColumnarPack:
         K, eK = self.bands_for(seq, tol); M, eM = self.modes_for(seq, scanner, tissue, tol)
         return self._plan(K, eK, M, eM, *self._tiers_of(tissue), voxels)
 
-    def plan_for_class(self, scanner_class, *, tissue=None, scanner=None, voxels=None):
-        """What a replay of ANY waveform scanner class ``scanner_class`` can play reads: the class's bands
-        (:meth:`bands_for_class`), every stored field mode when the tissue and the field make a field term (the
-        gate of a waveform not yet named cannot be projected), the tiers the tissue asks for, rows and bytes."""
+    def plan_for_envelope(self, envelope, *, tissue=None, scanner=None, voxels=None):
+        """What a replay of ANY waveform inside ``envelope`` reads (an :class:`~dmipy_replay.replay.envelope.Envelope`;
+        :func:`~dmipy_replay.replay.envelope.envelope_of` for a scanner class): its bands (:meth:`bands_for_envelope`),
+        every stored field mode when the tissue and the field make a field term (the gate of a waveform not yet named
+        cannot be projected), the tiers the tissue asks for, rows and bytes."""
         from .replay import field_term
-        K = self.bands_for_class(scanner_class)
+        K = self.bands_for_envelope(envelope)
         M = int(self.path_groups[-1]) if field_term(self.susceptibility_field, tissue, scanner).active else 0
         return self._plan(K, None, M, None, *self._tiers_of(tissue), voxels)
 

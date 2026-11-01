@@ -237,64 +237,50 @@ def field_term(declared, tissue, scanner, envelope=None):
 #: float32, so a lobe built at exactly ``G_max`` reads back to float32's rounding.
 GRADIENT_RTOL = 1e-6
 
-#: How many steps of its slope a sampled ramp may carry between two adjacent samples, against ``slew_max``. The
-#: builders sample a lobe at the middle of each step and cut it at a whole step, so the last sample of a ramp sits up to
-#: 1.5 steps of the slope above the zero that follows; a ramp at exactly ``slew_max`` therefore reads at most
-#: ``1.5 slew_max`` from its samples. A lobe that switches within one step reads as ``G / dt``, orders of magnitude above
-#: any scanner's limit, and is refused.
-SLEW_SAMPLING = 1.5
+
+def _view_of(meta):
+    """How a refusal names the header's envelope: the pack's, or a length-scaled view's moved one."""
+    ls = (meta.get("provenance") or {}).get("length_scaled")
+    return (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
+            if ls else " (replay_envelope.acquisition)")
+
 
 def check_acquisition_envelope(meta, waveform, *, field_active=False):
-    """Refuse, by name, a waveform outside the scanner class a pack is certified for (RPK.md 11: a request inside the
-    envelope is guaranteed, one outside is surfaced, never extrapolated). The guarantee is the class
-    ``replay_envelope.acquisition`` states -- ``bound`` ``"scanner_class"``, with ``scanner``, ``G_max`` (T/m, per axis)
-    and ``slew_max`` (T/m/s) -- and never a ``b`` battery. A header without that class (no ``bound``, or a battery
-    bound) states no guarantee a waveform can be held to and is refused too, as is a class missing a limit.
+    """Refuse, by name, a waveform outside the :class:`~dmipy_replay.replay.envelope.Envelope` a pack states (RPK.md 11:
+    a request inside the envelope is guaranteed, one outside is surfaced, never extrapolated). The envelope is
+    :meth:`Envelope.from_header` of ``meta``; a header that states none (no ``bound``, or a battery of b values) is
+    refused.
 
     * ``G_max``: the largest played gradient (:attr:`ScannerSequence.played_gradient`, the coils' own) on any axis,
       within :data:`GRADIENT_RTOL`.
-    * ``slew_max``: the largest per-axis sampled slew -- adjacent samples' difference over ``dt``, the first sample
-      against zero -- within :data:`SLEW_SAMPLING` times the limit.
     * ``max_refocusing_pulses``: where the pack stores a field channel and the request has a field term
       (``field_active``), the schedule's refocusing pulses (:attr:`RFSchedule.n_refocusing`) at most the depth the
       field channel is certified at.
 
-    The field strength and the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0``
-    is certified over the range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`).
+    The waveform's band is held to ``band_hz`` where the band is measured, against the pack's bands
+    (:meth:`ReplayPack._check_band`, :meth:`~dmipy_replay.replay.columnar.ColumnarPack.bands_for`). The field strength and
+    the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0`` is certified over the
+    range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`). No slew is checked: no term of the
+    certificate depends on a waveform's slew except through the band its ramps need.
 
-    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` and ``slew_max`` in the same
-    header keys and is held to them by this function; its refusals name the view."""
-    env = meta.get("replay_envelope") or {}
-    acq = env.get("acquisition") or {}
-    ident = meta.get("id")
-    if acq.get("bound") != "scanner_class":
-        raise ValueError(f"pack {ident!r} states no scanner-class envelope (replay_envelope.acquisition.bound = "
-                         f"{acq.get('bound')!r}): its certificate is a battery of b values, which is no guarantee for a "
-                         "waveform. Walk the substrate again with a scanner class (scanner, G_max, slew_max)")
-    missing = [k for k in ("scanner", "G_max", "slew_max") if acq.get(k) is None]
-    if missing:
-        raise ValueError(f"pack {ident!r} declares the scanner class {acq.get('scanner')!r} without "
-                         f"replay_envelope.acquisition.{', '.join(missing)}")
-    ls = (meta.get("provenance") or {}).get("length_scaled")
-    via = (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
-           if ls else " (replay_envelope.acquisition)")
-    G_max, slew_max = float(acq["G_max"]), float(acq["slew_max"])
+    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` in the same header key and is
+    held to it by this function; its refusals name the view. Returns the :class:`Envelope`."""
+    from .envelope import Envelope
+    env = Envelope.from_header(meta)
+    via = _view_of(meta)
     played = np.asarray(getattr(waveform, "played_gradient", waveform.G), np.float64)
     g = float(np.abs(played).max(initial=0.0))
-    if g > G_max * (1.0 + GRADIENT_RTOL):
-        raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {G_max:.4g} T/m per axis of "
-                         f"the scanner class {acq['scanner']!r} this pack is certified for{via}")
-    ramp = np.diff(played, axis=1, prepend=0.0) / float(waveform.dt)
-    sl = float(np.abs(ramp).max(initial=0.0))
-    if sl > slew_max * SLEW_SAMPLING * (1.0 + GRADIENT_RTOL):
-        raise ValueError(f"the waveform slews {sl:.4g} T/m/s on one axis (sampled), beyond the slew_max = {slew_max:.4g} "
-                         f"T/m/s (x {SLEW_SAMPLING:g} for a sampled ramp) of the scanner class {acq['scanner']!r} this pack is certified for{via}")
-    depth = acq.get("max_refocusing_pulses")
-    if field_active and depth is not None:
+    if g > env.G_max * (1.0 + GRADIENT_RTOL):
+        raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {env.G_max:.4g} T/m per axis of "
+                         f"the envelope {env.name!r} this pack is certified for{via}")
+    if field_active and env.max_refocusing_pulses is not None:
         n = waveform.rf.n_refocusing
-        if n > int(depth):
-            raise ValueError(f"the waveform plays {n} refocusing pulses with a field term, beyond the {int(depth)} "
-                             "this pack's field channel is certified for (replay_envelope.acquisition.max_refocusing_pulses)")
+        if n > env.max_refocusing_pulses:
+            raise ValueError(f"the waveform plays {n} refocusing pulses with a field term, beyond the "
+                             f"{env.max_refocusing_pulses} this pack's field channel is certified for "
+                             "(replay_envelope.acquisition.max_refocusing_pulses)")
+    return env
+
 
 
 def field_envelope_of(meta):
@@ -648,7 +634,8 @@ class ReplayPack:
         ``a < 1``, past what the walk's block was chosen to keep below the floor. A published pack does
         not carry what would re-certify it, so a slower replay is refused rather than returned uncertified;
         walk the pack at the slower diffusivity. The acquisition must still fit the shortened walk, ``T / a``,
-        which the replay checks as it checks every waveform.
+        which the replay checks as it checks every waveform. The view at ``G(t)`` is the walk at ``G(a t) / a``, so the
+        envelope moves with it: its ``band_hz`` and its ``G_max`` times ``a``.
 
         The result is an ordinary :class:`ReplayPack` sharing this one's arrays, so :meth:`prefix`, the pose
         cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.Tissue.D` on a replay
@@ -682,6 +669,10 @@ class ReplayPack:
         cx = meta.get("compression") or {}
         if cx.get("temporal_bandwidth_hz") is not None:
             cx["temporal_bandwidth_hz"] = float(cx["temporal_bandwidth_hz"]) * a
+        acq = (meta.get("replay_envelope") or {}).get("acquisition") or {}
+        for key in ("band_hz", "G_max", "slew_max"):         # the view at G(t) is the walk at G(a t) / a: every frequency
+            if acq.get(key) is not None:                     # and the amplitude move by a (slew_max, a class header's, by a^2)
+                acq[key] = float(acq[key]) * (a * a if key == "slew_max" else a)
         pm = (cx.get("channels") or {}).get("susc_field_basis")
         if pm is not None:
             pm["T"] = float(pm["T"]) / a                     # the field's modes are read over the shorter window
@@ -745,8 +736,8 @@ class ReplayPack:
         scaled grid. :attr:`~dmipy_replay.spec.Tissue.D` on a replay resolves against the view's diffusivity.
 
         Both directions are exact in the physics; what bounds ``s`` is the certificate. The view at ``G`` is the
-        walk at ``s G``, so the scanner class the pack is certified for (``replay_envelope.acquisition``) moves to
-        ``G_max / s`` and ``slew_max / s`` -- more than the pack states for ``s < 1``, less for ``s > 1`` -- and
+        walk at ``s G``, so the envelope the pack is certified for (``replay_envelope.acquisition``) moves to
+        ``G_max / s`` -- more than the pack states for ``s < 1``, less for ``s > 1``; its band, a frequency, stays -- and
         :meth:`_check_envelope` holds every replay to the moved limits, the view carrying no rule of its own; the
         contact tier's ``rho2_over_D_max`` moves to ``rho2_over_D_max / s`` the same way. The pair is recorded in
         ``provenance.length_scaled`` (``s`` cumulative over repeated views), with the battery's ``b_max`` over
@@ -793,7 +784,7 @@ class ReplayPack:
         if b_max is not None:
             acq["b_max"] = float(b_max) / (s * s)
         for key in ("G_max", "slew_max"):                                        # the view at G is this pack at s G
-            if acq.get(key) is not None:
+            if acq.get(key) is not None:                                         # (slew_max: a scanner-class header's)
                 acq[key] = float(acq[key]) / s
         tis = env.get("tissue") or {}
         if tis.get("rho2_over_D_max") is not None:
@@ -811,9 +802,9 @@ class ReplayPack:
         return type(self)(arrays, meta, source=self.source)
 
     def _check_envelope(self, waveform, field):
-        """The one check every replay route applies to a waveform against the pack's stated scanner class
-        (:func:`check_acquisition_envelope`): the per-axis gradient, the sampled slew, and the refocusing depth of
-        the field channel where ``field`` (the request's :class:`FieldTerm`) is active. A length-scaled view is held to
+        """The one check every replay route applies to a waveform against the pack's stated envelope
+        (:func:`check_acquisition_envelope`): the per-axis gradient and the refocusing depth of the field channel where
+        ``field`` (the request's :class:`FieldTerm`) is active; the band is :meth:`_check_band`'s. A length-scaled view is held to
         its moved limits by the same call. The field strength and the susceptibility reach their envelope in
         :func:`field_term`, which the routes call with :attr:`field_envelope`."""
         check_acquisition_envelope(self.meta, waveform, field_active=bool(field.active))
@@ -1653,24 +1644,39 @@ class ReplayPack:
         return windows * T_w, windows
 
     def _check_band(self, waveform):
-        """Refuse a waveform whose gradient needs more temporal band than this pack stores over the stretch it spans
-        (#277; :meth:`waveform_band`): the replay would otherwise return a smooth, plausible, wrong signal. A pack
-        that records no diffusivity (a synthetic master) cannot be judged and is not refused."""
+        """Refuse a waveform whose gradient needs more temporal band than this pack's envelope admits over the stretch
+        it spans (#277; :meth:`waveform_band`): the fewer of the bands it stores and ``ceil(2 band_hz T)`` of its
+        :attr:`envelope`. Beyond them the replay would return a smooth, plausible, wrong signal. A pack that records no
+        diffusivity (a synthetic master) cannot be judged and is not refused."""
         if self.diffusivity is None:
             return
         hz, bands, err = self.waveform_band(waveform)
         T, windows = self._span(_duration(waveform))
-        if bands <= self.K * windows:
+        env = self.envelope
+        stored = self.K * windows
+        admitted = min(stored, env.mode_count(T))
+        if bands <= admitted:
             return
         b = self.truncation_budget
         need = (f"more than {CONTINUOUS_BAND_CAP * self.K * windows / (2.0 * T):.4g} Hz over the {T * 1e3:.4g} ms it spans"
                 if not np.isfinite(hz) else f"{hz:.4g} Hz ({bands} bands over the {T * 1e3:.4g} ms it spans)")
+        if admitted < stored:
+            raise ValueError(f"the waveform's gradient reaches beyond the band of the envelope {env.name!r} this pack is "
+                             f"certified for: it needs {need} and the envelope admits band_hz = {env.band_hz:.4g} Hz "
+                             f"({admitted} bands){_view_of(self.meta)}. Replay a waveform within it")
         raise ValueError(f"the waveform's gradient reaches beyond this pack's temporal band: it needs {need} and the "
                          f"pack resolves {self.temporal_bandwidth_hz:.4g} Hz (K = {self.K} bands over {float(self.windows['T']) * 1e3:.4g} ms), "
                          f"which would drop up to {err:.2e} of the signal into phase the pack does not carry, against the "
                          f"{b['budget']:.2e} it may cost (its cap {b['cap']:.2e} from {b['cap_source']} less {b['other_terms']:.2e} "
-                         f"of other certified terms). Build a pack at this band or above "
-                         f"(build_replay_pack(temporal_bandwidth_hz=...)), or replay a waveform within this one")
+                         f"of other certified terms). Walk a pack whose envelope holds this band, or replay a waveform "
+                         f"within this one")
+
+    @property
+    def envelope(self):
+        """The :class:`~dmipy_replay.replay.envelope.Envelope` this pack is certified for
+        (:meth:`~dmipy_replay.replay.envelope.Envelope.from_header` of its header): what every replay is held to."""
+        from .envelope import Envelope
+        return Envelope.from_header(self.meta)
 
     @property
     def digest(self):
