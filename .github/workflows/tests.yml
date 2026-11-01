@@ -28,8 +28,8 @@ jobs:
         run: pytest -q
 
   extras:
-    # the optional extras (pose: scipy and threadpoolctl; jax; torch, its CPU wheel): the suite with every route the
-    # extras open, the core's own import still numpy-only (tests/test_light.py)
+    # the optional extras (pose: scipy and threadpoolctl; jax; torch, its CPU wheel) and the dipy oracle: the suite with
+    # every route the extras open, the core's own import still numpy-only (tests/test_light.py)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -47,6 +47,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test,pose,jax,torch]"
+          # dipy is the oracle the normative SH basis is checked against (tests/test_sh_basis.py); nothing imports it
+          pip install dipy
       - name: Test
         run: pytest -q
 
