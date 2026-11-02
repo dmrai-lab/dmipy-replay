@@ -31,7 +31,7 @@ package reads them.
   does not carry.
 - **Names.** A sequence's b-value and b-tensor are `seq.b()` and `seq.btensor()`; `calc_b` and `calc_btensor` are refused
   by name. The substrate spec's pool is `PoolSpec`, and the source of a columnar layout's bytes is
-  `columnar.ColumnSource`.
+  `columnar.ColumnSource`; `Pool` and `Source` are refused by name with the new spelling.
 - **Pairs with** dmipy-sim 3.0 (the producer of packs). It depends on no other dmipy package. Python >= 3.10, NumPy >= 2.0;
   the extras `pose` (SciPy, threadpoolctl), `jax`, `torch` and `all` open the routes that need them, and a route whose
   extra is missing is refused with its `pip install`.
