@@ -26,7 +26,7 @@ from dataclasses import dataclass, asdict
 
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 #: The plan's tolerance: the dropped bands and modes may cost this fraction of the pack's Monte-Carlo floor.
 PLAN_TOL = 0.25

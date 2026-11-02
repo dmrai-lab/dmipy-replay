@@ -14,7 +14,8 @@ import pytest
 
 pytest.importorskip("scipy")                    # the pose extra
 
-from dmipy_replay.math.sh_analytical import watson_sh
+from dmipy_analytic.harmonics import real_sh
+from dmipy_analytic.orientation import watson_sh
 from dmipy_replay.replay import so3
 
 LMAX = 8
@@ -28,6 +29,6 @@ def test_the_coefficients_are_the_projection_of_the_fitting_model_density(kappa)
     from dmipy_fit.distributions.distributions import SD1Watson, kappa2odi
     model = SD1Watson(mu=np.array([0.0, 0.0]), odi=float(kappa2odi(kappa)))   # theta, phi: the z axis
     dirs, w = so3.sphere_quadrature(48, 96)
-    Y = so3.real_sh(LMAX, dirs)
+    Y = real_sh(LMAX, dirs)
     c_model = (Y * (w * model(dirs))[:, None]).sum(axis=0)            # project the model's density
     npt.assert_allclose(watson_sh(np.array([0.0, 0.0, 1.0]), kappa, l_max=LMAX), c_model, atol=1e-9)

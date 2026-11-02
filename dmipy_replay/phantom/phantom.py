@@ -11,7 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from ..replay.so3 import n_sh_coeffs
+from dmipy_analytic.harmonics import n_sh_coeffs
+
 
 from dmipy_replay.phantom.grid import Grid
 from .substrates import Inert, PackSubstrate, substrate_from_meta

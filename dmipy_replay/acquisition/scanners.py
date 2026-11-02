@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..constants import GAMMA, GAMMA_BAR
+from dmipy_analytic.constants import GAMMA, GAMMA_BAR
 from . import maxwell, scanner_constants as scc, solid_harmonics
 from .prescription import _AXIS_LETTER
 

@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 from ..acquisition.rf import RFSchedule
 

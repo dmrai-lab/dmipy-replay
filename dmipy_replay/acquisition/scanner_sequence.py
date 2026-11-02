@@ -53,7 +53,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 from .prescription import Prescription
 from .rf import RFSchedule
 from .timing import SequenceTiming

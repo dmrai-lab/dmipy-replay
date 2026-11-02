@@ -38,7 +38,7 @@ import re
 import numpy as np
 
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 POSITION_METHOD = "bridge_dst"          # the only C0 representation: start, displacement and sine bands (RPK.md 9.5.3)
 

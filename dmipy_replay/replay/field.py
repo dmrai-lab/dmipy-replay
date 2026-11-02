@@ -250,7 +250,7 @@ def path_field_integral(arrays, meta, waveform, T, *, t0=None, n_w=None, modes=N
     (:func:`~dmipy_replay.replay.compression.cosine_projection`; Parseval, RPK.md 9.5.4) and ``c_k`` the stored modes.
     The names are in the canonical order, what dmipy-sim's ``fields.hollow_cylinder.field_terms`` reads. ``modes``
     sums the lowest ``modes`` field modes only (the plan's, :meth:`~dmipy_replay.replay.replay.ReplayPack.plan`)."""
-    from ..constants import GAMMA
+    from dmipy_analytic.constants import GAMMA
     Cs, names = susc_path_coeffs(arrays, meta, modes)
     if tuple(names) not in (tuple(CHANNEL_NAMES), tuple(ISO_CHANNEL_NAMES)):
         raise ValueError(f"the path channels are stored as {names}, not in the canonical order {tuple(CHANNEL_NAMES)}")

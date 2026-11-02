@@ -10,13 +10,15 @@ its basis named (:meth:`FOD.from_sh`, converted through DIPY as the oracle for t
 required basis (:meth:`FOD.native`, checked), or from a distribution this package knows (:meth:`FOD.watson`,
 :meth:`FOD.isotropic`), and is normalised to unit integral.
 
-The required basis is :func:`dmipy_replay.replay.so3.real_sh`: orthonormal real spherical harmonics, even
+The required basis is :func:`dmipy_analytic.harmonics.real_sh`: orthonormal real spherical harmonics, even
 orders, compact ``m = -l..l`` blocks -- DIPY's ``real_sh_tournier(..., legacy=False)`` (replay-pack-spec
 RPH.md section 4.1).
 """
 from dataclasses import dataclass
 
 import numpy as np
+
+from dmipy_analytic import harmonics
 
 from .so3 import lmax_of
 
@@ -83,8 +85,8 @@ class FOD:
 
     @classmethod
     def watson(cls, kappa, mu=(0.0, 0.0, 1.0), lmax=8):
-        """A Watson distribution about ``mu`` (exact coefficients, :func:`math.sh_analytical.watson_sh`)."""
-        from ..math.sh_analytical import watson_sh
+        """A Watson distribution about ``mu`` (exact coefficients, :func:`dmipy_analytic.orientation.watson_sh`)."""
+        from dmipy_analytic.orientation import watson_sh
         mu = np.asarray(mu, np.float64); mu = mu / np.linalg.norm(mu)
         return cls.native(watson_sh(mu, float(kappa), l_max=lmax), source=f"Watson kappa={kappa:g}")
 
@@ -96,8 +98,7 @@ class FOD:
     # ---- queries -----------------------------------------------------------------------------------------
     def evaluate(self, dirs):
         """The density at unit directions ``dirs`` (n, 3)."""
-        from .so3 import real_sh
-        return real_sh(self.lmax, np.asarray(dirs, np.float64).reshape(-1, 3)) @ self.coeffs
+        return harmonics.real_sh(self.lmax, np.asarray(dirs, np.float64).reshape(-1, 3)) @ self.coeffs
 
     @property
     def integral(self):

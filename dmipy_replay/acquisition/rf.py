@@ -36,7 +36,7 @@ peak-B1/SAR constrained, scored by a Bloch-simulated magnetisation profile.
 from dataclasses import dataclass
 import numpy as np
 
-from ..constants import GAMMA                       # rad / (s * T)
+from dmipy_analytic.constants import GAMMA                       # rad / (s * T)
 from . import scanner_constants as scc
 
 

@@ -317,7 +317,7 @@ class PartitionPhantom(Phantom):
             raise ValueError("the partition cites no signal-bearing substrate")
         if maps["off_resonance"] is not None and not bloch:
             # the phase route: a uniform precession over the voxel through the acquisition's own coherence gate
-            from dmipy_replay.constants import GAMMA
+            from dmipy_analytic.constants import GAMMA
             from ..replay.phantom import ReplayPhantom
             S = S * np.exp(1j * GAMMA * maps["off_resonance"][:, None] * ReplayPhantom.gate_integral(seq))
         from dmipy_replay.acquisition.scanners import ScannerLimits

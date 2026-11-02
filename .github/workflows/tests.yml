@@ -7,6 +7,11 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+env:
+  # dmipy-analytic 3.0 is not on PyPI yet: every job installs it from the commit this revision was tested against, the
+  # head of dmrai-lab/dmipy-analytic#3 (the forms from dmipy-replay and dmipy-sim)
+  DMIPY_ANALYTIC_REF: a6aa6a1e82ad275a482e39c57db89421a41d3a0a
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,6 +28,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          pip install "dmipy-analytic @ git+https://github.com/dmrai-lab/dmipy-analytic@${DMIPY_ANALYTIC_REF}"
           pip install -e ".[test]"
       - name: Test
         run: pytest -q
@@ -45,6 +51,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          pip install "dmipy-analytic @ git+https://github.com/dmrai-lab/dmipy-analytic@${DMIPY_ANALYTIC_REF}"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test,pose,jax,torch]"
           # dipy is the oracle the normative SH basis is checked against (tests/test_sh_basis.py); nothing imports it
@@ -63,6 +70,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          pip install "dmipy-analytic @ git+https://github.com/dmrai-lab/dmipy-analytic@${DMIPY_ANALYTIC_REF}"
           pip install -e ".[test]" "numpy==2.0.0"
       - name: Test
         run: pytest -q
@@ -83,6 +91,7 @@ jobs:
       - name: Install the packages before the move
         run: |
           python -m pip install --upgrade pip
+          pip install "dmipy-analytic @ git+https://github.com/dmrai-lab/dmipy-analytic@${DMIPY_ANALYTIC_REF}"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           ref() { python -c "import json, sys; print(json.load(open('tests/parity_move/reference/manifest.json'))['packages'][sys.argv[1]]['commit'])" "$1"; }
           pip install "dmipy-replay @ git+https://github.com/dmrai-lab/dmipy-replay@$(ref dmipy-replay)"
