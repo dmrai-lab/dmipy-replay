@@ -1,8 +1,8 @@
 """The gradient integrals and the measurement-axis transforms of a :class:`ScannerSequence`.
 
 ``b_from_gradient`` / ``btensor_from_gradient`` are THE b and B-tensor integrals of a gradient array
-``(n_measurements, n_t, 3)`` in T/m on a ``dt`` grid (rectangular q, trapezoidal integral); ``calc_b`` /
-``calc_btensor`` read a sequence's EFFECTIVE gradient; ``btensor_invariants`` names a B-tensor's shape;
+``(n_measurements, n_t, 3)`` in T/m on a ``dt`` grid (rectangular q, trapezoidal integral), which a sequence's own
+``b()`` / ``btensor()`` read at its EFFECTIVE gradient; ``btensor_invariants`` names a B-tensor's shape;
 ``set_b`` / ``rotate_waveform`` / ``tile_waveform`` return a sequence rescaled, rotated or tiled along its
 measurement axis, its ``Encoding`` following. The builders live in :mod:`dmipy_replay.sequences`.
 """
@@ -56,9 +56,11 @@ def band_hz(G, dt, eps=1e-3):
 def b_from_gradient(G, dt):
     """b (s/m²) per measurement from a gradient array ``(n_measurements, n_t, 3)`` and its step:
     ``b = ∫ |k|² dt`` by the trapezoidal rule, with ``k`` the moment to the readout of
-    :func:`_moment_to_readout`. This is the one b integral of the package: :func:`calc_b`,
-    :meth:`ScannerSequence.btensor` and every constructor's numeric scaling read it. For a balanced waveform
-    it is the textbook ``∫ |q|² dt``; for an unbalanced one it is the attenuation the walk produces.
+    :func:`_moment_to_readout`. This is the one b integral of the package: :meth:`ScannerSequence.b` and every
+    constructor's numeric scaling read it. For a balanced waveform it is the textbook ``∫ |q|² dt``; for an
+    unbalanced one it is the attenuation the walk produces. The rule for q is rectangular because a trapezoidal q
+    (disimpy's) agrees only to ``O(dt)``: on a sharp-edged pulse of fewer than about 10 steps it underestimates the
+    largest moment by about ``0.5 / n_pulse``, so ``set_b`` would over-scale the gradient.
     """
     k = _moment_to_readout(G, dt)
     return np.trapezoid(np.sum(k ** 2, axis=2), dx=float(dt), axis=1).astype(np.float64)
@@ -72,57 +74,13 @@ def btensor_from_gradient(G, dt):
     return np.trapezoid(kk, dx=float(dt), axis=1).astype(np.float64)
 
 
-def calc_b(waveform):
-    """Compute b-values for each measurement of a ScannerSequence (s/m²).
-
-    Uses the rectangular (left-point) rule to accumulate q(t), then
-    integrates |q(t)|² with the trapezoidal rule.  This is internally
-    consistent with the simulation's phase accumulation
-    (physics.py: dphi = GAMMA*dt * dot(G[t], r_new)), which is also
-    a rectangular rule evaluated at the new position.
-
-    Note: disimpy's gradients.calc_b() uses a trapezoidal rule for q(t)
-    accumulation (gradients.py:60-66).  The two agree to O(dt) and are
-    indistinguishable for smooth (interpolated) waveforms.  For sharp-edged
-    waveforms with very few steps per pulse (n_pulse < ~10), the trapezoidal
-    rule underestimates q_max by ≈ 0.5/n_pulse, causing set_b to over-scale
-    G and introducing a systematic error of order (0.5/n_pulse)² in b.
-    The rectangular rule avoids this inconsistency.
-
-    Returns
-    -------
-    b_values : np.ndarray of shape (n_measurements,)
-    """
-    return b_from_gradient(waveform.G_eff, waveform.dt)
-
-
-def calc_btensor(waveform):
-    """Compute the B-tensor for each measurement.
-
-    B_ij = ∫ k_i(t) k_j(t) dt   where k(t) = q(t) - q(T), q(t) = γ ∫₀ᵗ G(t') dt'
-
-    Evaluated with the same rectangular rule as calc_b(), so
-    trace(calc_btensor(wf)) == calc_b(wf) to float64 precision.
-
-    Parameters
-    ----------
-    waveform : ScannerSequence
-
-    Returns
-    -------
-    B : np.ndarray, shape (n_measurements, 3, 3), float64
-        B-tensor in s/m².
-    """
-    return btensor_from_gradient(waveform.G_eff, waveform.dt)
-
-
 def btensor_invariants(B):
     """Extract scalar invariants from B-tensor array.
 
     Parameters
     ----------
     B : np.ndarray, shape (n_measurements, 3, 3)
-        B-tensor in s/m² (e.g. from calc_btensor).
+        B-tensor in s/m² (e.g. ``seq.btensor()``).
 
     Returns
     -------
@@ -175,7 +133,7 @@ def set_b(waveform, b_target):
     ----------
     waveform : ScannerSequence
     b_target : float or array of shape (n_measurements,)
-        Target b-values in **s/m²** (SI units), consistent with ``calc_b``.
+        Target b-values in **s/m²** (SI units), consistent with ``waveform.b()``.
         Typical clinical values: 1e8–3e9 s/m² (= 100–3000 s/mm²).
 
         .. warning::
@@ -190,7 +148,7 @@ def set_b(waveform, b_target):
     ScannerSequence with scaled G.
     """
     import warnings
-    b_current = calc_b(waveform)
+    b_current = waveform.b()
     b_arr = np.asarray(b_target, dtype=np.float64).ravel()
     b_nonzero = b_arr[b_arr > 0]
     if b_nonzero.size > 0 and b_nonzero.max() < 1e5:
@@ -296,3 +254,6 @@ def tile_waveform(waveform, n_copies):
     return replace(waveform, G=G_tiled.astype(np.float32), encoding=None)      # n_meas changes: the encoding does not carry over
 
 
+def __getattr__(name):
+    from .._moved import refuse
+    raise refuse(__name__, name)
