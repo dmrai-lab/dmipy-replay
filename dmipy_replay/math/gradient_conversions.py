@@ -1,9 +1,5 @@
-"""q/b/g conversions for idealised PGSE encoding (exact algebra).
-
-Vendored into dmipy-replay from dmipy_fit.core.gradient_conversions so the sim
-package is self-contained. The gyromagnetic ratio is dmipy-replay's own
-:data:`dmipy_replay.constants.GAMMA` (= 267.513e6 rad/s/T, identical to the value
-fit uses), so results match the fit implementation bit-for-bit.
+"""q/b/g conversions for idealised PGSE encoding (exact algebra), at the gyromagnetic ratio
+:data:`dmipy_replay.constants.GAMMA`: the ecosystem's one copy, which dmipy-fit imports.
 """
 import numpy as np
 

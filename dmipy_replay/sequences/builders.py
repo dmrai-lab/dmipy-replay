@@ -26,7 +26,8 @@ from ..acquisition.rf import RFEvent, RFSchedule
 from ..acquisition.scanner_sequence import Encoding, ScannerSequence
 from ..constants import DEFAULT_SLEW_RATE
 from ..math.gradient_conversions import g_from_b, q_from_b
-from ._helpers import _calc_b_from_waveform, _resolve_te, unify_length_reference_delta_Delta
+from ..acquisition.waveforms import b_from_gradient
+from ._helpers import _resolve_te, unify_length_reference_delta_Delta
 from .assemble import (PreparedEchoTrain, EchoTrain, GradientEcho, SpinEcho, StimulatedEcho, assemble, axis_pairs, bipolar, cosine,
                        ramp_of, trapezoid, trapezoid_train)
 
@@ -388,7 +389,7 @@ def from_waveform(G, dt, gradient_directions, delta=None, Delta=None, TE=None, a
     from warnings import warn
     G = np.asarray(G, dtype=np.float32)
     gradient_directions = np.asarray(gradient_directions, dtype=np.float64)
-    bvalues = _calc_b_from_waveform(G, dt)
+    bvalues = b_from_gradient(G, dt)
     delta_, Delta_, TE_ = unify_length_reference_delta_Delta(bvalues, delta, Delta, TE)
     qvalues = gradient_strengths = None
     if delta_ is not None and Delta_ is not None:
@@ -445,7 +446,7 @@ def from_btensor_waveform(G, dt, *, echo_idx=None, TE=None, timing=None):
         schedule = RFSchedule([RFEvent(timing.t_prep, 90, 'Mz→Mxy', duration_s=timing.t_excite),
                                RFEvent(echo_idx * dt, 180, 'refocus', duration_s=timing.t_refocus)])
     sign = schedule.sign(np.arange(n_t) * dt)[None, :, None]
-    bvalues_num = _calc_b_from_waveform(G * sign, dt)
+    bvalues_num = b_from_gradient(G * sign, dt)
     return ScannerSequence(
         G=G, dt=dt, rf=schedule, timing=timing, family='btensor',
         encoding=Encoding(bvalues=bvalues_num, gradient_directions=gradient_directions, TE=TE_, minimum_te=T_total,
@@ -494,7 +495,7 @@ def from_pgste_waveform(G, dt, *, store_idx, recall_idx, gradient_directions=Non
     sign = schedule.sign(np.arange(n_t) * dt)[None, :, None]
     delta = float(store_idx * dt)
     TM = float((recall_idx - store_idx) * dt)
-    bvalues_num = _calc_b_from_waveform(G * sign, dt)
+    bvalues_num = b_from_gradient(G * sign, dt)
     gradient_directions = (np.tile([0., 0., 1.], (n_m, 1)) if gradient_directions is None
                            else np.asarray(gradient_directions, dtype=np.float64))
     TE_, te_auto = _resolve_te(TE, T_total, n_m)
