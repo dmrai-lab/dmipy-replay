@@ -45,7 +45,7 @@ def __getattr__(name):
         return getattr(importlib.import_module(f"{__name__}.{_LAZY[name]}"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dmipy-replay"
-version = "0.1.0"
+version = "0.2.0"
 description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; numpy only"
 readme = "README.md"
 license = {text = "Apache-2.0"}
