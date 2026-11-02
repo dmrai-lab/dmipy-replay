@@ -40,8 +40,7 @@ __all__ = ['watson_zonal_ratios', 'watson_sh', 'bingham_normalization', 'bingham
 def cart2sphere(cartesian_coordinates):
     """Spherical coordinates [r, theta, phi] from cartesian [x, y, z].
 
-    range of theta [0, pi], range of phi [-pi, pi]; dipy notation.  Vendored
-    from dmipy_fit.utils.utils.cart2sphere.
+    range of theta [0, pi], range of phi [-pi, pi]; dipy notation. The ecosystem's one copy: dmipy-fit imports it.
     """
     cartesian_coordinates = np.asarray(cartesian_coordinates)
     if np.ndim(cartesian_coordinates) == 1:
