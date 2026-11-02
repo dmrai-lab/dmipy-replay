@@ -37,10 +37,12 @@ import numpy as np
 
 from numpy.polynomial.legendre import leggauss
 
+from dmipy_analytic import harmonics
+
 from .._extras import need
 
-__all__ = ["real_sh", "sphere_quadrature", "n_sh_coeffs", "sh_block",
-           "n_so3_coeffs", "so3_index", "wigner_blocks", "so3_design", "haar_design", "haar_rotations",
+__all__ = ["sphere_quadrature",
+           "n_so3_coeffs", "so3_index", "so3_design", "haar_design", "haar_rotations",
            "so3_quadrature",
            "density_coeffs", "delta_coeffs", "axis_density_coeffs", "axis_coeffs", "watson_coeffs",
            "bingham_coeffs",
@@ -49,71 +51,11 @@ __all__ = ["real_sh", "sphere_quadrature", "n_sh_coeffs", "sh_block",
            "Distribution"]
 
 
-# ------------------------------------------------------------------ real spherical harmonics
-# The basis is normative: orthonormal real spherical harmonics, DIPY's `real_sh_tournier(legacy=False)` (RPH.md
-# 4.1). Several conventions in circulation are not orthonormal -- DIPY's default `legacy=True` scales every
-# m != 0 function by 1/sqrt(2) -- and every identity here, from the rotation matrices to the Peter-Weyl inner
-# product, holds only in an orthonormal one. Coefficients from elsewhere are converted on the way in
+# ------------------------------------------------------------------ the quadrature on the sphere
+# The basis is dmipy-analytic's (:mod:`dmipy_analytic.harmonics`, RPH.md 4.1): the orthonormal real spherical
+# harmonics of DIPY's `real_sh_tournier(legacy=False)`, in which every identity here holds, from the rotation matrices
+# to the Peter-Weyl inner product. Coefficients from elsewhere are converted on the way in
 # (:class:`dmipy_replay.replay.fod.FOD`), never assumed.
-def n_sh_coeffs(lmax, full=False):
-    """Coefficients in the compact layout up to ``lmax`` (even orders only unless ``full``).
-
-    ``full=True`` keeps odd orders too.  It is needed wherever the two acquisition directions
-    are expanded: antipodal symmetry of the response constrains ``l1 + l2`` to be even, which
-    admits odd--odd pairs such as ``P_1 P_1`` -- weaker than requiring each order even.
-    """
-    step = 1 if full else 2
-    return sum(2 * l + 1 for l in range(0, lmax + 1, step))
-
-
-def sh_block(l, full=False):
-    """Slice of the compact array holding order ``l`` (``m = -l..+l``)."""
-    if full:
-        return slice(l * l, l * l + 2 * l + 1)
-    M = l // 2
-    start = M * (2 * M - 1) if M > 0 else 0
-    return slice(start, start + 2 * l + 1)
-
-
-def real_sh(lmax, dirs, full=False):
-    """Orthonormal real spherical harmonics in the compact layout.
-
-    ``dirs`` is ``(n, 3)`` unit Cartesian; returns ``(n, n_sh_coeffs(lmax, full))``. Every order comes from one
-    pass of the standard three-term recurrences on the fully normalised associated Legendre functions
-    (Condon-Shortley phase included, as ``scipy.special.lpmv`` has it), vectorised over the directions: the
-    same numbers as evaluating ``lpmv`` per ``(l, m)`` to 1e-12, at a small fraction of its cost, which is what
-    the closed-form pose expansion needs when it evaluates the harmonics of every walker's moment.
-    """
-    d = np.asarray(dirs, np.float64).reshape(-1, 3)
-    x = np.clip(d[:, 2], -1.0, 1.0)
-    phi = np.arctan2(d[:, 1], d[:, 0])
-    s = np.sqrt(np.clip(1.0 - x * x, 0.0, 1.0))
-    L = int(lmax)
-    # P[l][m] = K_lm P_l^m(x), K_lm = sqrt((2l+1)/4pi (l-m)!/(l+m)!): the diagonal by the sectoral recurrence, the
-    # first off-diagonal by one step, the rest by the standard recurrence in l at fixed m
-    P = [[None] * (l + 1) for l in range(L + 1)]
-    P[0][0] = np.full(d.shape[0], 1.0 / np.sqrt(4.0 * np.pi))
-    for m in range(1, L + 1):
-        P[m][m] = -np.sqrt((2.0 * m + 1.0) / (2.0 * m)) * s * P[m - 1][m - 1]
-    for m in range(0, L):
-        P[m + 1][m] = np.sqrt(2.0 * m + 3.0) * x * P[m][m]
-    for m in range(0, L + 1):
-        for l in range(m + 2, L + 1):
-            a = np.sqrt((4.0 * l * l - 1.0) / (l * l - m * m))
-            b = np.sqrt(((l - 1.0) ** 2 - m * m) / (4.0 * (l - 1.0) ** 2 - 1.0))
-            P[l][m] = a * x * P[l - 1][m] - a * b * P[l - 2][m]
-    cos_m = [np.cos(m * phi) for m in range(L + 1)]
-    sin_m = [np.sin(m * phi) for m in range(L + 1)]
-    out = np.empty((d.shape[0], n_sh_coeffs(L, full)), np.float64)
-    for l in range(0, L + 1, 1 if full else 2):
-        col = out[:, sh_block(l, full)]
-        col[:, l] = P[l][0]
-        for m in range(1, l + 1):
-            col[:, l + m] = np.sqrt(2.0) * P[l][m] * cos_m[m]
-            col[:, l - m] = np.sqrt(2.0) * P[l][m] * sin_m[m]
-    return out
-
-
 def sphere_quadrature(n_theta, n_phi):
     """Gauss-Legendre (cos theta) x uniform (phi) product rule; weights sum to 4 pi.
 
@@ -200,46 +142,6 @@ def so3_index(lmax, nmax=None):
 
 
 # ------------------------------------------------------------------ the basis
-def _sh_l(l, dirs):
-    """Order-``l`` block of the orthonormal real spherical harmonics, ``(n, 2l+1)``: the recurrence of
-    :func:`real_sh` (``lpmv`` is not used anywhere: at high orders it has crashed the process)."""
-    return np.ascontiguousarray(real_sh(int(l), dirs, full=True)[:, sh_block(int(l), True)])
-
-
-@functools.lru_cache(maxsize=64)
-def _anchors(l):
-    """Directions and the pseudo-inverse of their harmonics, for reading a rotation matrix off its action.
-
-    ``M^l(R)`` is fixed by ``Y_l(R a) = M^l(R) Y_l(a)`` at ``2l+1`` independent directions. The anchor set is
-    over-determined (a Fibonacci spiral of ``4l+4`` directions) and inverted in least squares, which keeps the
-    read-off well conditioned without a hand-rolled Wigner recursion to get wrong.
-    """
-    k = 4 * l + 4
-    i = np.arange(k) + 0.5
-    z = 1.0 - 2.0 * i / k
-    r = np.sqrt(np.clip(1.0 - z * z, 0.0, 1.0))
-    phi = i * np.pi * (1.0 + np.sqrt(5.0))
-    a = np.stack([r * np.cos(phi), r * np.sin(phi), z], axis=1)
-    A = _sh_l(l, a)
-    return a, np.linalg.pinv(A)
-
-
-def wigner_blocks(lmax, R):
-    """Per order ``l``, the ``(N, 2l+1, 2l+1)`` real rotation matrices ``M^l(R)`` of the harmonic basis.
-
-    ``M^l`` is defined by ``Y_lm(R d) = sum_m' M^l(R)[m, m'] Y_lm'(d)``, so it is a group homomorphism and
-    orthogonal, and its ``m' = 0`` column is the harmonics of the rotated pole.
-    """
-    R = np.asarray(R, np.float64).reshape(-1, 3, 3)
-    out = []
-    for l in range(int(lmax) + 1):
-        a, Ainv = _anchors(l)
-        Ra = np.einsum("nij,kj->nki", R, a)                       # R a_k for every rotation
-        Y = _sh_l(l, Ra.reshape(-1, 3)).reshape(R.shape[0], a.shape[0], 2 * l + 1)
-        out.append(np.einsum("nkm,jk->nmj", Y, Ainv))
-    return out
-
-
 @functools.lru_cache(maxsize=8)
 def quadrature_design(lmax, nmax, frame_axis=(0.0, 0.0, 1.0)):
     """The quadrature rotations, their Haar weights and their design matrix, built once per band.
@@ -261,7 +163,7 @@ def haar_design(lmax, nmax, n_samples, seed=0):
 
 def so3_design(lmax, R, nmax=None):
     """``(N, n_so3_coeffs(lmax, nmax))`` orthonormal basis values ``sqrt(2l+1) D^l_{mn}(R)``."""
-    blocks = wigner_blocks(lmax, R)
+    blocks = harmonics.wigner_blocks(lmax, R)
     cols = []
     for l, M in enumerate(blocks):
         k = _n_cols(l, nmax) // 2
@@ -382,12 +284,12 @@ def rotate_sh(coeffs, R, lmax=None):
     n_c = c.shape[-1]
     if lmax is None:
         lmax = lmax_of(n_c)
-    if n_sh_coeffs(lmax) != n_c:
+    if harmonics.n_sh_coeffs(lmax) != n_c:
         raise ValueError(f"{n_c} coefficients is not an even-order compact block")
-    blocks = wigner_blocks(lmax, np.asarray(R, np.float64).reshape(1, 3, 3))
+    blocks = harmonics.wigner_blocks(lmax, np.asarray(R, np.float64).reshape(1, 3, 3))
     out = np.zeros_like(c)
     for l in range(0, lmax + 1, 2):
-        blk = sh_block(l)
+        blk = harmonics.sh_block(l)
         out[..., blk] = c[..., blk] @ blocks[l][0].T
     return out
 
@@ -481,18 +383,18 @@ def _axis_map(lmax, nmax, frame_axis=(0.0, 0.0, 1.0)):
     """
     R, w, A = quadrature_design(lmax, nmax, frame_axis)
     f = np.asarray(frame_axis, np.float64); f = f / np.linalg.norm(f)
-    Y = real_sh(lmax, np.einsum("nij,j->ni", R, f), full=True)
+    Y = harmonics.real_sh(lmax, np.einsum("nij,j->ni", R, f), full=True)
     return 4.0 * np.pi * (A * w[:, None]).T @ Y
 
 
 def _embed_sh(coeffs, lmax):
     """Even-order (or full) harmonic coefficients placed in the full layout up to ``lmax``."""
     c = np.asarray(coeffs, np.float64).reshape(-1)
-    out = np.zeros(n_sh_coeffs(lmax, full=True))
-    if c.size == n_sh_coeffs(lmax, full=True):
+    out = np.zeros(harmonics.n_sh_coeffs(lmax, full=True))
+    if c.size == harmonics.n_sh_coeffs(lmax, full=True):
         return c
     for l in range(0, lmax + 1, 2):                                   # even orders, compact -> full
-        src, dst = sh_block(l, False), sh_block(l, True)
+        src, dst = harmonics.sh_block(l, False), harmonics.sh_block(l, True)
         if src.stop <= c.size:
             out[dst] = c[src]
     return out
@@ -515,16 +417,16 @@ def axis_coeffs(direction, lmax, nmax=None, frame_axis=(0.0, 0.0, 1.0)):
     """
     n = np.asarray(direction, np.float64).reshape(3)
     n = n / np.linalg.norm(n)
-    return axis_density_coeffs(real_sh(int(lmax), n[None, :], full=True)[0], lmax, nmax, frame_axis)
+    return axis_density_coeffs(harmonics.real_sh(int(lmax), n[None, :], full=True)[0], lmax, nmax, frame_axis)
 
 
 def watson_coeffs(kappa, mu=(0.0, 0.0, 1.0), lmax=8, nmax=None, frame_axis=(0.0, 0.0, 1.0)):
     """Watson dispersion about ``mu``: one concentration, no preferred azimuth.
 
-    The harmonic coefficients are exact (:func:`dmipy_replay.math.sh_analytical.watson_sh`), so this is
+    The harmonic coefficients are exact (:func:`dmipy_analytic.orientation.watson_sh`), so this is
     the analytic form mapped onto the group rather than a density sampled on a grid.
     """
-    from ..math.sh_analytical import watson_sh
+    from dmipy_analytic.orientation import watson_sh
     mu = np.asarray(mu, np.float64); mu = mu / np.linalg.norm(mu)
     # an axis density has only even orders, and the analytic forms are written in that layout, so the harmonic
     # order rounds down to even while the SO(3) band it is embedded in stays as asked
@@ -541,12 +443,12 @@ def bingham_coeffs(frame, kappa, lmax=8, nmax=None, roll_kappa=0.0, frame_axis=(
     ``k2``, and two equal values are the Watson of that concentration.
 
     With the azimuth free -- the usual case, and what an orientation distribution states -- this is
-    the analytic form of :func:`dmipy_replay.math.sh_analytical.bingham_sh`. ``roll_kappa`` ties the
+    the analytic form of :func:`dmipy_analytic.orientation.bingham_sh`. ``roll_kappa`` ties the
     substrate's own azimuth to the frame (a von Mises about it), which is a density on the group
     rather than on the sphere and has no closed form here, so that case alone is projected by
     quadrature.
     """
-    from ..math.sh_analytical import bingham_sh
+    from dmipy_analytic.orientation import bingham_sh
     F = np.asarray(frame, np.float64).reshape(3, 3)
     k1, k2 = (float(kappa[0]), float(kappa[1])) if np.ndim(kappa) else (float(kappa), float(kappa))
     if not roll_kappa:
@@ -643,7 +545,7 @@ def rotate_coeffs(coeffs, R, lmax, nmax=None):
     canonical shape, and a whole grid of frames is one batched product rather than a quadrature per voxel.
     """
     c = np.atleast_2d(np.asarray(coeffs, np.float64))
-    M = wigner_blocks(int(lmax), np.asarray(R, np.float64).reshape(-1, 3, 3))
+    M = harmonics.wigner_blocks(int(lmax), np.asarray(R, np.float64).reshape(-1, 3, 3))
     n_R = M[0].shape[0]
     if c.shape[0] not in (1, n_R) and n_R != 1:
         raise ValueError(f"{c.shape[0]} coefficient vectors and {n_R} rotations do not broadcast")
@@ -711,7 +613,7 @@ def lmax_of(n_c):
     """The even order whose compact real spherical-harmonic block has ``n_c = (l + 1)(l + 2) / 2`` coefficients."""
     n_c = int(n_c)
     l = int(round((-3 + np.sqrt(1 + 8 * n_c)) / 2))
-    if l % 2 or n_sh_coeffs(l) != n_c:
+    if l % 2 or harmonics.n_sh_coeffs(l) != n_c:
         raise ValueError(f"{n_c} coefficients is not an even-order compact real spherical-harmonic block "
                          f"((l + 1)(l + 2) / 2 for even l)")
     return l
@@ -755,3 +657,8 @@ def energy(coeffs, lmax, nmax=None):
 def evaluate(coeffs, lmax, R, nmax=None):
     """The fitted response at given rotations."""
     return so3_design(lmax, R, nmax) @ np.asarray(coeffs).reshape(-1)
+
+
+def __getattr__(name):
+    from .._moved import refuse
+    raise refuse(__name__, name)

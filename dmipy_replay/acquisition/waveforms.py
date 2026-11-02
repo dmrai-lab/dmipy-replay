@@ -10,7 +10,7 @@ measurement axis, its ``Encoding`` following. The builders live in :mod:`dmipy_r
 from dataclasses import replace
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 
 def _moment_to_readout(G, dt):

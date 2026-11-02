@@ -26,7 +26,7 @@ import os
 
 import numpy as np
 
-from ..constants import GAMMA_BAR
+from dmipy_analytic.constants import GAMMA_BAR
 from ..acquisition.rf import B1Pulse, RFEvent, RFSchedule
 from ..acquisition.timing import SequenceTiming
 from ..acquisition.scanner_sequence import ScannerSequence

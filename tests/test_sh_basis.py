@@ -1,11 +1,10 @@
-"""The normative harmonic basis, pinned against DIPY as the oracle (RPH.md 4.1).
+"""The conversion of the harmonic conventions in circulation into the basis the format requires (RPH.md 4.1), checked
+against DIPY as the oracle.
 
-`so3.real_sh` is this package's own implementation of the basis the format requires, and
-`FOD.from_sh` converts the conventions in circulation into it. Both are checked here against DIPY
-rather than against themselves: the composition's reduction to a distribution over directions holds
-only in an orthonormal basis, and the error a non-orthonormal one introduces vanishes exactly where
-the gradient is parallel to the field -- the one configuration a cursory check would use, which is
-why the pin exists at all.
+The basis is dmipy-analytic's (`dmipy_analytic.harmonics.real_sh`, pinned to DIPY's non-legacy `tournier` there), and
+`FOD.from_sh` converts the conventions in circulation into it: the composition's reduction to a distribution over
+directions holds only in an orthonormal basis, and the error a non-orthonormal one introduces vanishes exactly where
+the gradient is parallel to the field -- the one configuration a cursory check would use.
 """
 import numpy as np
 import numpy.testing as npt
@@ -14,7 +13,9 @@ import pytest
 pytest.importorskip("scipy")                    # the pose extra
 
 from dmipy_replay.replay.fod import FOD
-from dmipy_replay.replay.so3 import real_sh, sh_block, sphere_quadrature
+from dmipy_analytic.harmonics import real_sh, sh_block
+
+from dmipy_replay.replay.so3 import sphere_quadrature
 
 LMAX = 8
 
@@ -30,23 +31,6 @@ def _dipy(name, lmax, dirs):
     if name == "tournier":
         return real_sh_tournier(lmax, th, ph, legacy=False)[0]
     return real_sh_descoteaux(lmax, th, ph, legacy=False)[0]
-
-
-def test_required_basis_is_dipy_tournier_non_legacy():
-    """The one that matters: this package's basis IS the basis the format names, to the bit."""
-    dirs, _w = sphere_quadrature(48, 96)
-    npt.assert_allclose(real_sh(LMAX, dirs), _dipy("tournier", LMAX, dirs), atol=1e-12)
-
-
-def test_the_basis_is_orthonormal_where_the_conventions_are_not():
-    dirs, w = sphere_quadrature(48, 96)
-    Y = real_sh(LMAX, dirs)
-    npt.assert_allclose(np.einsum("qa,qb,q->ab", Y, Y, w), np.eye(Y.shape[1]), atol=1e-10)
-    Ym = _dipy("mrtrix", LMAX, dirs)
-    gram = np.einsum("qa,qb,q->ab", Ym, Ym, w)
-    assert np.abs(gram - np.eye(gram.shape[0])).max() > 0.4          # the legacy basis is not
-    Yd = _dipy("descoteaux", LMAX, dirs)
-    npt.assert_allclose(np.einsum("qa,qb,q->ab", Yd, Yd, w), np.eye(Yd.shape[1]), atol=1e-10)
 
 
 @pytest.mark.parametrize("basis,legacy", [("tournier07", True), ("tournier07", False),

@@ -26,6 +26,22 @@ def _attr(path):
     return obj
 
 
+class _Merged:
+    """The names of several modules, each read from the first that defines it: a module beside the dmipy-analytic
+    modules its forms moved to (dmrai-lab/dmipy-sim#834), so that a call table written against one module reads both."""
+
+    def __init__(self, *paths):
+        self._paths = paths
+
+    def __getattr__(self, name):
+        for path in self._paths:
+            try:
+                return getattr(importlib.import_module(path), name)
+            except AttributeError:
+                continue
+        raise AttributeError(name)
+
+
 class _Spelling:
     """Names resolved lazily from :attr:`PATHS`; a method of a pack is resolved on the pack."""
 
@@ -47,7 +63,8 @@ class _Spelling:
     def __getattr__(self, name):
         if name not in self.PATHS:
             raise AttributeError(name)
-        return _attr(self.PATHS[name])
+        path = self.PATHS[name]
+        return _Merged(*path) if isinstance(path, tuple) else _attr(path)
 
     def call(self, op, pack, *args, **kw):
         """``op`` (a writer operation or a pack method) on ``pack``."""
@@ -117,8 +134,8 @@ class After(_Spelling):
     name = "after"
     PATHS = dict(_COMMON, **{
         "read_rpk": "dmipy_replay:read_rpk",
-        "so3": "dmipy_replay.replay.so3",
-        "sh_analytical": "dmipy_replay.math.sh_analytical",
+        "so3": ("dmipy_replay.replay.so3", "dmipy_analytic.harmonics"),
+        "sh_analytical": ("dmipy_analytic.orientation", "dmipy_analytic.harmonics"),
         "FOD": "dmipy_replay.replay.fod:FOD",
         "Distribution": "dmipy_replay.replay.so3:Distribution",
         "PoseResponse": "dmipy_replay.replay.pose:PoseResponse",
@@ -155,7 +172,7 @@ class After(_Spelling):
     }
     DEFAULTS = {"columnar_image": "numpy", "segment_image": "numpy", "pose": "numpy"}
     FEATURES = {
-        "so3": lambda: hasattr(_attr("dmipy_replay.replay.so3"), "real_sh") and _attr("dmipy_replay.replay.fod:FOD") is not None,
+        "so3": lambda: _attr("dmipy_analytic.harmonics:real_sh") is not None and _attr("dmipy_replay.replay.fod:FOD") is not None,
         "pose": lambda: hasattr(_attr("dmipy_replay:ReplayPack"), "pose_responses"),
         "series": lambda: hasattr(_attr("dmipy_replay:ReplayPack"), "pose_series"),
         "jax_bloch": lambda: "jax" in _attr("dmipy_replay:ReplayPack").BLOCH_BACKENDS,

@@ -5,30 +5,10 @@ import pytest
 
 pytest.importorskip("scipy")                    # the pose extra
 
+from dmipy_analytic import harmonics
+
 from dmipy_replay.replay import so3
 from dmipy_replay.replay.fod import FOD
-
-
-def test_the_rotation_matrices_are_the_representation_they_claim_to_be():
-    """``M^l(R)`` is read off the action of ``R`` on the harmonics, so it must be orthogonal, multiplicative,
-    and reproduce that action -- the three properties every later step leans on."""
-    R = so3.haar_rotations(5, seed=1)
-    lmax = 6
-    blocks = so3.wigner_blocks(lmax, R)
-    d = so3.haar_rotations(7, seed=2)[:, :, 2]                       # some directions
-    for l, M in enumerate(blocks):
-        assert M.shape == (5, 2 * l + 1, 2 * l + 1)
-        for k in range(5):
-            np.testing.assert_allclose(M[k] @ M[k].T, np.eye(2 * l + 1), atol=1e-9)
-            # the defining property: Y_l(R d) = M^l(R) Y_l(d)
-            Yl = lambda x: so3._sh_l(l, x)
-            np.testing.assert_allclose(Yl(d @ R[k].T), Yl(d) @ M[k].T, atol=1e-9)
-    # a homomorphism, which is what makes a composition of poses composable
-    A, B = R[0], R[1]
-    for l, (Ma, Mb, Mab) in enumerate(zip(so3.wigner_blocks(lmax, A[None]),
-                                          so3.wigner_blocks(lmax, B[None]),
-                                          so3.wigner_blocks(lmax, (A @ B)[None]))):
-        np.testing.assert_allclose(Mab[0], Ma[0] @ Mb[0], atol=1e-9)
 
 
 def test_the_basis_is_orthonormal_under_the_quadrature():
@@ -123,3 +103,21 @@ def test_the_azimuthal_band_is_measured_not_asserted():
     skew = np.array([1.0 if n == 1 else 0.0 for (_l, _m, n) in idx])
     _pl, pn = so3.energy(skew, lmax, nmax)
     assert pn[1] > 0 and pn[0] == 0.0
+
+
+def test_two_real_wigner_blocks_multiply_through_the_coupling_tables():
+    """``M^l1[m,n] M^l2[m',n'] = sum_L K_L[(m,m'),M] M^L[M,N] conj(K_L[(n,n'),N])`` with ``K_L`` from the complex
+    Clebsch-Gordan coefficients and the real-from-complex unitaries: the product of two expansions on SO(3) is a
+    contraction with these tables, the whole basis of composing a field with a gradient (#197 step 3)."""
+    for (l1, l2) in [(1, 1), (2, 3), (4, 2), (6, 5), (9, 5)]:
+        C = np.concatenate([so3.clebsch_gordan(l1, l2, L) for L in range(abs(l1 - l2), l1 + l2 + 1)], axis=1)
+        np.testing.assert_allclose(C.T @ C, np.eye(C.shape[1]), atol=1e-10)          # CG: orthogonal
+        np.testing.assert_allclose(C @ C.T, np.eye(C.shape[0]), atol=1e-10)
+    Rs = so3.haar_rotations(3, 11)
+    for (l1, l2) in [(3, 1), (4, 6), (9, 5)]:
+        B1, B2 = harmonics.wigner_blocks(l1, Rs)[l1], harmonics.wigner_blocks(l2, Rs)[l2]
+        BL = harmonics.wigner_blocks(l1 + l2, Rs)
+        K = so3.coupling(l1, l2)
+        for r in range(Rs.shape[0]):
+            prod = sum(K[L] @ BL[L][r] @ K[L].conj().T for L in K)
+            np.testing.assert_allclose(prod, np.kron(B1[r], B2[r]), atol=1e-12)

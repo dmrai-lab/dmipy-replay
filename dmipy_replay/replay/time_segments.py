@@ -416,7 +416,7 @@ class Partition:
         """``(n_seg, n_seg)``: ``B_st = gamma^2 int Q_s Q_t dt`` with ``Q_s(t) = int_a^t psi_s`` the running integral of
         term ``s``, so that an effective encoding with levels ``l`` on the terms has ``b = l^T B l`` (s/m^2) when it is
         refocused; exact (each ``Q_s`` is piecewise linear between the cell edges)."""
-        from ..constants import GAMMA
+        from dmipy_analytic.constants import GAMMA
         pts = np.unique(np.concatenate([[0.0]] + [sh.edges(a, b) for sh, (a, b) in zip(self.shapes, self.segments)]))
         Q = np.stack([sh.running(pts, a, b) for sh, (a, b) in zip(self.shapes, self.segments)])
         L = np.diff(pts); qa, qb = Q[:, :-1], Q[:, 1:]

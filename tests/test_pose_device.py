@@ -1,5 +1,7 @@
 """The pose expansion's device kernels against their numpy oracles (dmrai-lab/dmipy-sim#449)."""
 import numpy as np
+
+from dmipy_analytic import harmonics
 import pytest
 
 pytest.importorskip("scipy")                    # the pose extra
@@ -20,7 +22,7 @@ def test_the_field_factor_on_the_device_is_the_numpy_one_to_float32_rounding():
     a, A = _field()
     Lp = 12
     dirs, wq = so3.sphere_quadrature(Lp + 2, 2 * Lp + 2)
-    Yw = so3.real_sh(Lp, dirs, full=True) * wq[:, None]
+    Yw = harmonics.real_sh(Lp, dirs, full=True) * wq[:, None]
     ref = field_factor(a, A, dirs, Yw, device="numpy")
     dev = field_factor(a, A, dirs, Yw, device="jax", chunk_bytes=1 << 22)         # several chunks
     assert dev.shape == ref.shape
@@ -32,7 +34,7 @@ def test_the_numpy_route_is_chunk_independent():
     a, A = _field(n_w=700)
     Lp = 6
     dirs, wq = so3.sphere_quadrature(Lp + 2, 2 * Lp + 2)
-    Yw = so3.real_sh(Lp, dirs, full=True) * wq[:, None]
+    Yw = harmonics.real_sh(Lp, dirs, full=True) * wq[:, None]
     whole = field_factor(a, A, dirs, Yw, device="numpy")
     parts = field_factor(a, A, dirs, Yw, device="numpy", chunk_bytes=1 << 16)
     # a BLAS may block a product differently by its row count, so the chunks agree to rounding, not to the bit
@@ -72,7 +74,7 @@ def test_the_harmonics_on_the_device_are_the_numpy_ones_to_float32_rounding():
     rng = np.random.default_rng(4)
     d = rng.normal(size=(3000, 3)); d /= np.linalg.norm(d, axis=1, keepdims=True)
     for L in (0, 3, 15, 28):
-        ref = so3.real_sh(L, d, full=True)
+        ref = harmonics.real_sh(L, d, full=True)
         dev = real_sh(L, d, device="jax", chunk_bytes=1 << 16)
         assert dev.shape == ref.shape
         assert np.abs(dev - ref).max() <= 3e-5 * np.abs(ref).max(), (L, np.abs(dev - ref).max())
@@ -123,7 +125,7 @@ def test_the_numpy_route_is_the_direct_formula():
     a, A = _field(n_w=1500)
     Lp = 8
     dirs, wq = so3.sphere_quadrature(Lp + 2, 2 * Lp + 2)
-    Yw = so3.real_sh(Lp, dirs, full=True) * wq[:, None]
+    Yw = harmonics.real_sh(Lp, dirs, full=True) * wq[:, None]
     q = np.einsum("qa,wab,qb->wq", dirs, A, dirs)
     direct = np.exp(1j * (a[:, None] + q)) @ Yw
     got = field_factor(a, A, dirs, Yw, device="numpy", chunk_bytes=1 << 17)
@@ -157,7 +159,7 @@ def test_the_torch_harmonics_and_bessel_values_are_the_numpy_ones():
     rng = np.random.default_rng(4)
     d = rng.normal(size=(3000, 3)); d /= np.linalg.norm(d, axis=1, keepdims=True)
     for L in (0, 1, 3, 15, 28):
-        ref = so3.real_sh(L, d, full=True)
+        ref = harmonics.real_sh(L, d, full=True)
         assert np.abs(real_sh_torch(L, torch.as_tensor(d)).numpy() - ref).max() <= 1e-13
         f32 = real_sh_torch(L, torch.as_tensor(d, dtype=torch.float32)).double().numpy()
         assert np.abs(f32 - ref).max() <= 3e-5 * np.abs(ref).max()
@@ -192,7 +194,7 @@ def test_the_torch_bodies_tails_and_field_factor_are_the_numpy_ones_to_float32_r
     a, A = _field()
     Lp = 12
     dirs, wq = so3.sphere_quadrature(Lp + 2, 2 * Lp + 2)
-    Yw = so3.real_sh(Lp, dirs, full=True) * wq[:, None]
+    Yw = harmonics.real_sh(Lp, dirs, full=True) * wq[:, None]
     ref = field_factor(a, A, dirs, Yw, device="numpy")
     dev = field_factor(a, A, dirs, Yw, device="torch:cpu", chunk_bytes=1 << 20)
     assert np.abs(dev - ref).max() <= 1e-5 * np.abs(ref).max()

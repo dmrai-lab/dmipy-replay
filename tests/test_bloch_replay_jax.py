@@ -8,7 +8,7 @@ off-resonance carrier, slice-select, per-walker B1+, the MT bound-pool blend, an
 """
 import numpy as np
 from dmipy_replay.acquisition.rf import B1Pulse, RFEvent
-from dmipy_replay.constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 import pytest
 
 pytest.importorskip("jax")                      # the jax extra

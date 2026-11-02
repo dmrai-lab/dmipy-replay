@@ -18,8 +18,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 requires-python = ">=3.10"
-# 2.0 is the oldest numpy the test suite passes on (np.trapezoid is new in 2.0; the suite was run on numpy 2.0.0)
-dependencies = ["numpy>=2.0"]
+# 2.0 is the oldest numpy the test suite passes on (np.trapezoid is new in 2.0; the suite was run on numpy 2.0.0);
+# dmipy-analytic holds the forms (the constants, the harmonic basis, the orientation forms, the extended phase graph)
+# and imports with numpy alone
+dependencies = ["numpy>=2.0", "dmipy-analytic>=3,<4"]
 
 keywords = ["diffusion MRI", "Monte Carlo", "replay pack", "Pulseq", "simulation"]
 
@@ -30,7 +32,7 @@ Specification = "https://github.com/dmrai-lab/replay-pack-spec"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0", "safetensors>=0.4"]      # safetensors is the oracle the container is checked against
-pose = ["scipy>=1.10", "threadpoolctl>=3.1"]    # the pose expansion: scipy's special functions and rotations; the CPU thread cap
+pose = ["scipy>=1.10", "threadpoolctl>=3.1", "dmipy-analytic[special]>=3,<4"]    # the pose expansion: scipy's special functions and rotations, the forms that need them; the CPU thread cap
 jax = ["jax>=0.6.2"]                            # the JAX kernels, run where backend="jax" is stated
 torch = ["torch>=2.2"]                          # the torch kernels, run where backend="torch" is stated
 all = ["dmipy-replay[pose,jax,torch]"]

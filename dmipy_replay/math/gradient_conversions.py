@@ -1,9 +1,9 @@
 """q/b/g conversions for idealised PGSE encoding (exact algebra), at the gyromagnetic ratio
-:data:`dmipy_replay.constants.GAMMA`: the ecosystem's one copy, which dmipy-fit imports.
+:data:`dmipy_analytic.constants.GAMMA`.
 """
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 __all__ = [
     'q_from_b', 'b_from_q', 'q_from_g', 'g_from_q', 'b_from_g', 'g_from_b',
