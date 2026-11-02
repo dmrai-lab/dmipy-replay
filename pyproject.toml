@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dmipy-replay"
 version = "0.2.0"
-description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; numpy only"
+description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; a NumPy core, with the pose expansion, JAX and torch as extras"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [{ name = "Rutger Fick", email = "fick.rutger@gmail.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
