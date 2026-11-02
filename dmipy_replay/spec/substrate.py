@@ -28,7 +28,7 @@ TIERS = ("gradient", "relaxation", "surface", "field", "exchange")
 #: The values of :func:`susceptibility_field_of`: the substrate's susceptibility field is present (some pool is
 #: magnetic) or absent (nothing in the substrate is magnetic, so the field is identically zero).
 SUSCEPTIBILITY_FIELD = ("present", "absent")
-#: The numbers a :class:`Pool` carries, which :meth:`SubstrateSpec.replace` takes per pool.
+#: The numbers a :class:`PoolSpec` carries, which :meth:`SubstrateSpec.replace` takes per pool.
 POOL_VALUES = ("D", "T1", "T2", "water_fraction", "susceptibility")
 #: The per-instance arrays a :class:`Surface`'s ``instances`` may hold, all lengths (metres), which
 #: :meth:`SubstrateSpec.scaled` multiplies by the size scale.
@@ -64,7 +64,10 @@ class Susceptibility:
 
 
 @dataclass(frozen=True)
-class Pool:
+class PoolSpec:
+    """A pool of a substrate spec: its dense ``id`` (0 is the free pool), ``name``, free diffusivity ``D`` (m^2/s;
+    ``None``: the diffusivity the walk is driven with), ``water_fraction``, nominal ``T2`` / ``T1`` and, for a
+    magnetic pool, its :class:`Susceptibility`."""
     id: int
     name: str
     D: Optional[float]           # None: the free diffusivity the walk is driven with
@@ -352,7 +355,7 @@ def _build(cls, d):
             continue
         v = d[f.name]
         if cls is SubstrateSpec and f.name == "pools":
-            v = [_build(Pool, dict(x)) if isinstance(x, dict) else x for x in v]
+            v = [_build(PoolSpec, dict(x)) if isinstance(x, dict) else x for x in v]
         elif cls is SubstrateSpec and f.name == "walls":
             v = [_build(Wall, dict(x)) if isinstance(x, dict) else x for x in v]
         elif f.name in _NESTED and isinstance(v, dict) and not (cls is Domain and f.name == "surface_relaxivity"):
@@ -619,3 +622,8 @@ def validate(d):
                                        for w in walls):
         raise SpecError("validity.tiers lists 'exchange' but no wall is permeable or MT-reactive")
     return d
+
+
+def __getattr__(name):
+    from .._moved import refuse
+    raise refuse(__name__, name)

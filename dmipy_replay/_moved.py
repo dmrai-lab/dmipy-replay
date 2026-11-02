@@ -10,6 +10,8 @@ import sys
 SPELLINGS = {
     "dmipy_replay": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
     "dmipy_replay.acquisition.waveforms": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
+    "dmipy_replay.spec.substrate": {"Pool": "PoolSpec (from dmipy_replay.spec.substrate import PoolSpec)"},
+    "dmipy_replay.replay.columnar": {"Source": "ColumnSource (from dmipy_replay.replay.columnar import ColumnSource)"},
 }
 """``{module: {refused name: its one spelling}}``, stated whole: a method of a sequence (``seq.b()``), or a new name with
 the import that brings it (``PoolSpec (from dmipy_replay.spec.substrate import PoolSpec)``)."""
