@@ -8,9 +8,9 @@ on:
   workflow_dispatch: {}
 
 env:
-  # dmipy-analytic 3.0 is not on PyPI yet: every job installs it from the commit this revision was tested against, the
-  # merge of dmrai-lab/dmipy-analytic#3 on main (the forms from dmipy-replay and dmipy-sim)
-  DMIPY_ANALYTIC_REF: 784830d26e4ec15a5dae4a03f2d01000b73bed1b
+  # every job installs dmipy-analytic from the commit this revision was tested against: main at the merge of
+  # dmrai-lab/dmipy-analytic#13 (bloch_torrey, the reference of tests/test_cross_tier.py, is on it)
+  DMIPY_ANALYTIC_REF: 5df4b9c611a3144b438c42405d406c55fa894d84
 
 jobs:
   test:
