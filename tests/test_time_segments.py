@@ -1,4 +1,4 @@
-"""The time-segment layout read here against dmipy-sim's own reads of the same layout (``tools/make_segment_fixtures.py``):
+"""The time-segment layout read here against dmipy-sim's own reads of the same layout (``data/segment_reference.json``, recorded at dmipy-sim ``8d7b97f`` and frozen):
 the words and the tiers are the same code and the same bits, the fits the same to the least-squares solver's rounding; the image is the same float32 arithmetic on
 numpy that sim's kernel runs on JAX, equal to the float32 rounding of the phases."""
 import json
@@ -80,7 +80,7 @@ def test_the_tier_maps_are_sims(lay):
 
 def test_a_backend_it_does_not_have_is_refused_by_name(lay):
     with pytest.raises(ValueError, match="backend is one of"):
-        lay.image(ACQ["box"][1], backend="jax")
+        lay.image(ACQ["box"][1], backend="cupy")
 
 
 def test_a_waveform_off_the_stored_shapes_is_refused(lay):

@@ -1,0 +1,257 @@
+{
+ "entries": {
+  "at/asymmetry": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "at/b1/dw/asymmetry": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "at/b1/dw/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a14",
+   "sha256": "666d4e4ee002f9a7363d6632140998f3cf5a0d50be6b693ee279efb56cd7761b",
+   "shape": [
+    1,
+    1089
+   ]
+  },
+  "at/b1/dw/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/b1/dw/floor": {
+   "kind": "float",
+   "value": "0.040824829046386304"
+  },
+  "at/b1/dw/lmax": {
+   "kind": "int",
+   "value": 32
+  },
+  "at/b1/dw/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a15",
+   "sha256": "a35f4a9f386dfaf971a599472d09e281b64b61b735b58ed998ba72379f6d085b",
+   "shape": [
+    1
+   ]
+  },
+  "at/b1/dw/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "at/b1/dw/nmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/b1/dw/phase_amplitude": {
+   "kind": "float",
+   "value": "17.440751957222094"
+  },
+  "at/b1/dw/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "at/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "5aef7b1825114c87e9faca9eba0ee84a797a2887a3e93258aa71218d29c606ff",
+   "shape": [
+    1,
+    1089
+   ]
+  },
+  "at/echo0/asymmetry": {
+   "kind": "float",
+   "value": "0.0"
+  },
+  "at/echo0/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a12",
+   "sha256": "4e6499bd4f74fe8826ffe4edd3ed1aa68287a397cf22b1b76210ee2c560ecaf1",
+   "shape": [
+    1,
+    1089
+   ]
+  },
+  "at/echo0/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/echo0/floor": {
+   "kind": "float",
+   "value": "0.040824829046386304"
+  },
+  "at/echo0/lmax": {
+   "kind": "int",
+   "value": 32
+  },
+  "at/echo0/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a13",
+   "sha256": "a98a0bf3b098246c2ed11d3f648704f0d968d7bf890b8f5e06a60268cf8407b6",
+   "shape": [
+    1
+   ]
+  },
+  "at/echo0/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "at/echo0/nmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/echo0/phase_amplitude": {
+   "kind": "float",
+   "value": "17.440751957222094"
+  },
+  "at/echo0/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "at/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/floor": {
+   "kind": "float",
+   "value": "0.040824829046386304"
+  },
+  "at/lmax": {
+   "kind": "int",
+   "value": 32
+  },
+  "at/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a11",
+   "sha256": "6e7a8e0179f0de3b78f96b822729d577f58964fc85029396ccc4847fea13a1f0",
+   "shape": [
+    1
+   ]
+  },
+  "at/n_bodies": {
+   "kind": "NoneType",
+   "value": null
+  },
+  "at/nmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "at/phase_amplitude": {
+   "kind": "float",
+   "value": "17.440751957222094"
+  },
+  "at/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "n_gates": {
+   "kind": "int",
+   "value": 5
+  },
+  "repr": {
+   "kind": "str",
+   "value": "TrainResponse(gates=5, echoes=3, lmax=32)"
+  },
+  "weights/F+|F+": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "36a1022f10511134eabf975fc2207c17eb70bed81719424666a006a4710d0234",
+   "shape": [
+    3
+   ]
+  },
+  "weights/F+|F-": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "f68eecbc5206665093d70b4b58df7e08692f712f80bdcb7c32c94b62a0fdeaf0",
+   "shape": [
+    3
+   ]
+  },
+  "weights/F+|Z": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "dc0dfc1052bfe9592bc9c5ca10b79cfce944e90b55a85c34ef6635deded05b5c",
+   "shape": [
+    3
+   ]
+  },
+  "weights/Z|F+": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "460f6c571e7421c7a9c2e6cea26001170aaf9c6ce0169a212ac22e1293b650b2",
+   "shape": [
+    3
+   ]
+  },
+  "weights/Z|Z": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "460f6c571e7421c7a9c2e6cea26001170aaf9c6ce0169a212ac22e1293b650b2",
+   "shape": [
+    3
+   ]
+  },
+  "weights/b1/F+|F+": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "2e7abbb7d5f974339e59b7ab8e7b4868d4589d739f417ce7169dcda3b900a4ff",
+   "shape": [
+    3
+   ]
+  },
+  "weights/b1/F+|F-": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "a1a81d3c55c4fd2b9005c24681429cdf6e0287e2895a7699a78fb6814f19ea73",
+   "shape": [
+    3
+   ]
+  },
+  "weights/b1/F+|Z": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "d825bcc8fb1a75774871e7986443dfc92f572df8ca77ceb4d02b7f9671866d2c",
+   "shape": [
+    3
+   ]
+  },
+  "weights/b1/Z|F+": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+   "shape": [
+    3
+   ]
+  },
+  "weights/b1/Z|Z": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+   "shape": [
+    3
+   ]
+  }
+ },
+ "seconds": 0.588449467002647,
+ "status": "ok"
+}

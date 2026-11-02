@@ -13,7 +13,7 @@ The forward is exact and cheap. The signal is
     E = < w_i exp(i phi_i) > / < w_i > ,   phi_i(m) = gamma * dt * sum_t G_m(t) . r_i(t)
 
 and because the phase is linear in position it is a contraction of the stored coefficients ``C_i`` (the two
-endpoints and the ``K`` bands the walk accumulated, :mod:`dmipy_replay.engine.accumulate`) with the waveform's
+endpoints and the ``K`` bands the walk accumulated, dmipy-sim's ``engine.accumulate``) with the waveform's
 projection on the same basis,
 
     phi_i(m) = sum_{k,c} C_{i,k,c} * W_{m,k,c},
@@ -52,15 +52,15 @@ from ..acquisition.scanner_sequence import Protocol, ScannerSequence
 __all__ = ["ReplayPack", "read_rpk", "compile_scheme", "replay_signal", "replay_coefficients", "surface_logweight"]
 
 
-def read_rpk(path, *, cls=None):
+def read_rpk(path):
     """Read a replay pack into a :class:`ReplayPack` (arrays + metadata). A pack that embeds no substrate spec, or
     whose spec's pools, tiers and stored field channel disagree (:func:`declared_susceptibility_field`), is
-    refused. ``cls`` is the class built, a subclass of :class:`ReplayPack` (the producer's, which adds its routes)."""
+    refused."""
     from .container import read_safetensors
     arrays, hdr = read_safetensors(path)
     meta = json.loads(hdr.get("rpk") or hdr.get("json") or "{}")
     _refuse_predating(meta, path, tensors=arrays)
-    pack = (cls or ReplayPack)(arrays, meta, source=str(path))
+    pack = ReplayPack(arrays, meta, source=str(path))
     pack.susceptibility_field
     return pack
 
@@ -237,64 +237,56 @@ def field_term(declared, tissue, scanner, envelope=None):
 #: float32, so a lobe built at exactly ``G_max`` reads back to float32's rounding.
 GRADIENT_RTOL = 1e-6
 
-#: How many steps of its slope a sampled ramp may carry between two adjacent samples, against ``slew_max``. The
-#: builders sample a lobe at the middle of each step and cut it at a whole step, so the last sample of a ramp sits up to
-#: 1.5 steps of the slope above the zero that follows; a ramp at exactly ``slew_max`` therefore reads at most
-#: ``1.5 slew_max`` from its samples. A lobe that switches within one step reads as ``G / dt``, orders of magnitude above
-#: any scanner's limit, and is refused.
-SLEW_SAMPLING = 1.5
+
+def _view_of(meta):
+    """How a refusal names the header's envelope: the pack's, or a length-scaled view's moved one."""
+    ls = (meta.get("provenance") or {}).get("length_scaled")
+    return (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
+            if ls else " (replay_envelope.acquisition)")
+
 
 def check_acquisition_envelope(meta, waveform, *, field_active=False):
-    """Refuse, by name, a waveform outside the scanner class a pack is certified for (RPK.md 11: a request inside the
-    envelope is guaranteed, one outside is surfaced, never extrapolated). The guarantee is the class
-    ``replay_envelope.acquisition`` states -- ``bound`` ``"scanner_class"``, with ``scanner``, ``G_max`` (T/m, per axis)
-    and ``slew_max`` (T/m/s) -- and never a ``b`` battery. A header without that class (no ``bound``, or a battery
-    bound) states no guarantee a waveform can be held to and is refused too, as is a class missing a limit.
+    """Refuse, by name, a waveform outside the :class:`~dmipy_replay.replay.envelope.Envelope` a pack states (RPK.md 11:
+    a request inside the envelope is guaranteed, one outside is surfaced, never extrapolated). The envelope is
+    :meth:`Envelope.from_header` of ``meta``; a header that states none (no ``bound``, or a battery of b values) is
+    refused.
 
     * ``G_max``: the largest played gradient (:attr:`ScannerSequence.played_gradient`, the coils' own) on any axis,
       within :data:`GRADIENT_RTOL`.
-    * ``slew_max``: the largest per-axis sampled slew -- adjacent samples' difference over ``dt``, the first sample
-      against zero -- within :data:`SLEW_SAMPLING` times the limit.
     * ``max_refocusing_pulses``: where the pack stores a field channel and the request has a field term
-      (``field_active``), the schedule's refocusing pulses (:attr:`RFSchedule.n_refocusing`) at most the depth the
-      field channel is certified at.
+      (``field_active``), the schedule's refocusing pulses within any one storage window
+      (:attr:`RFSchedule.refocusing_times`, binned by ``walk_params.windows.T``; the whole schedule on a one-window
+      pack) at most the depth the field channel of a window is certified at.
 
-    The field strength and the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0``
-    is certified over the range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`).
+    The waveform's band is held to ``band_hz`` where the band is measured, against the pack's bands
+    (:meth:`ReplayPack._check_band`, :meth:`~dmipy_replay.replay.columnar.ColumnarPack.bands_for`). The field strength and
+    the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0`` is certified over the
+    range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`). No slew is checked: no term of the
+    certificate depends on a waveform's slew except through the band its ramps need.
 
-    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` and ``slew_max`` in the same
-    header keys and is held to them by this function; its refusals name the view."""
-    env = meta.get("replay_envelope") or {}
-    acq = env.get("acquisition") or {}
-    ident = meta.get("id")
-    if acq.get("bound") != "scanner_class":
-        raise ValueError(f"pack {ident!r} states no scanner-class envelope (replay_envelope.acquisition.bound = "
-                         f"{acq.get('bound')!r}): its certificate is a battery of b values, which is no guarantee for a "
-                         "waveform. Walk the substrate again with a scanner class (scanner, G_max, slew_max)")
-    missing = [k for k in ("scanner", "G_max", "slew_max") if acq.get(k) is None]
-    if missing:
-        raise ValueError(f"pack {ident!r} declares the scanner class {acq.get('scanner')!r} without "
-                         f"replay_envelope.acquisition.{', '.join(missing)}")
-    ls = (meta.get("provenance") or {}).get("length_scaled")
-    via = (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
-           if ls else " (replay_envelope.acquisition)")
-    G_max, slew_max = float(acq["G_max"]), float(acq["slew_max"])
+    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` in the same header key and is
+    held to it by this function; its refusals name the view. Returns the :class:`Envelope`."""
+    from .envelope import Envelope
+    env = Envelope.from_header(meta)
+    via = _view_of(meta)
     played = np.asarray(getattr(waveform, "played_gradient", waveform.G), np.float64)
     g = float(np.abs(played).max(initial=0.0))
-    if g > G_max * (1.0 + GRADIENT_RTOL):
-        raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {G_max:.4g} T/m per axis of "
-                         f"the scanner class {acq['scanner']!r} this pack is certified for{via}")
-    ramp = np.diff(played, axis=1, prepend=0.0) / float(waveform.dt)
-    sl = float(np.abs(ramp).max(initial=0.0))
-    if sl > slew_max * SLEW_SAMPLING * (1.0 + GRADIENT_RTOL):
-        raise ValueError(f"the waveform slews {sl:.4g} T/m/s on one axis (sampled), beyond the slew_max = {slew_max:.4g} "
-                         f"T/m/s (x {SLEW_SAMPLING:g} for a sampled ramp) of the scanner class {acq['scanner']!r} this pack is certified for{via}")
-    depth = acq.get("max_refocusing_pulses")
-    if field_active and depth is not None:
-        n = waveform.rf.n_refocusing
-        if n > int(depth):
-            raise ValueError(f"the waveform plays {n} refocusing pulses with a field term, beyond the {int(depth)} "
-                             "this pack's field channel is certified for (replay_envelope.acquisition.max_refocusing_pulses)")
+    if g > env.G_max * (1.0 + GRADIENT_RTOL):
+        raise ValueError(f"the waveform plays {g:.4g} T/m on one axis, beyond the G_max = {env.G_max:.4g} T/m per axis of "
+                         f"the envelope {env.name!r} this pack is certified for{via}")
+    if field_active and env.max_refocusing_pulses is not None:
+        t = waveform.rf.refocusing_times
+        win = (meta.get("walk_params") or {}).get("windows") or {}
+        per_window = win.get("n") is not None and int(win["n"]) > 1      # a header with no windows is one window
+        n = int(np.bincount(np.floor(t / float(win["T"]) * (1.0 + 1e-12)).astype(np.int64)).max(initial=0)) if per_window and t.size \
+            else int(t.size)
+        if n > env.max_refocusing_pulses:
+            where = f" within one {float(win['T']) * 1e3:.4g} ms storage window" if per_window else ""
+            raise ValueError(f"the waveform plays {n} refocusing pulses{where} with a field term, beyond the "
+                             f"{env.max_refocusing_pulses} this pack's field channel is certified for "
+                             "(replay_envelope.acquisition.max_refocusing_pulses)")
+    return env
+
 
 
 def field_envelope_of(meta):
@@ -315,6 +307,12 @@ def _numpy_bloch():
     """The numpy vector-Bloch propagator, the reference (:func:`~dmipy_replay.replay.bloch.replay_bloch`)."""
     from .bloch import replay_bloch
     return replay_bloch
+
+
+def _jax_bloch():
+    """The JAX vector-Bloch propagator (:func:`~dmipy_replay.replay.bloch_jax.replay_bloch_jax`), the ``jax`` extra."""
+    from .bloch_jax import replay_bloch_jax
+    return replay_bloch_jax
 
 
 def _pose_matrix(pose):
@@ -346,11 +344,12 @@ class ReplayPack:
         return open_columnar(uri, workers=workers)
 
     #: the vector-Bloch propagators by name: a factory returning the function (``bloch.replay_bloch``'s arguments)
-    BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch()}
+    BLOCH_BACKENDS = {"numpy": lambda: _numpy_bloch(), "jax": lambda: _jax_bloch()}
 
     @staticmethod
     def _as_distribution(orientation):
-        """``orientation=`` as a distribution of poses, or None when it names a single pose."""
+        """``orientation=`` as a distribution of poses (a :class:`~dmipy_replay.replay.so3.Distribution`, or an
+        :class:`~dmipy_replay.replay.fod.FOD` read as an axis density), or None when it names a single pose."""
         return _as_distribution(orientation)
 
     def __init__(self, arrays, meta, source=None):
@@ -377,7 +376,7 @@ class ReplayPack:
     def decode_budget(self):
         """Bytes of decoded arrays this pack may hold, settable: :data:`~dmipy_replay.replay.decoded.DECODE_BUDGET_BYTES`
         (1 GiB) unless set. The readers (:func:`~dmipy_replay.replay.compression.read_position_coeffs`,
-        :func:`~dmipy_replay.replay.bank.susc_path_coeffs`, :func:`~dmipy_replay.replay.compression.bridge_bands`,
+        dmipy-sim's ``replay.bank.susc_path_coeffs``, :func:`~dmipy_replay.replay.compression.bridge_bands`,
         :func:`~dmipy_replay.replay.compression.occupancy_events`) decode each selection of the pack's stored tensors once
         and every later call of :meth:`replay`, :meth:`walker_signals`, :meth:`walker_phases` and the rest reads the
         held read-only array; an array that does not fit beside what is held is decoded on every call, as
@@ -408,10 +407,10 @@ class ReplayPack:
             if not is_hub_uri(path):
                 raise ValueError(f"windows= reads a pack's leading windows from the hub by byte range; "
                                  f"{path!r} is not an hf:// URI")
-            return read_rpk(fetch_windows(path, windows, **kw), cls=cls)
+            return read_rpk(fetch_windows(path, windows, **kw))
         if kw:
             raise TypeError(f"load() takes {sorted(kw)} only together with windows=")
-        return read_rpk(fetch(path) if is_hub_uri(path) else path, cls=cls)
+        return read_rpk(fetch(path) if is_hub_uri(path) else path)
 
     @property
     def windows(self):
@@ -552,7 +551,7 @@ class ReplayPack:
 
     @property
     def substrate(self):
-        """The :class:`~dmipy_replay.spec.SubstrateSpec` the walk was driven by, when the pack embeds one."""
+        """The :class:`~dmipy_replay.spec.substrate.SubstrateSpec` the walk was driven by, when the pack embeds one."""
         d = self.meta.get("substrate")
         if d is None:
             return None
@@ -631,8 +630,8 @@ class ReplayPack:
         permeability scales with the diffusivity: the view is the walk at ``(a D, a kappa)`` -- the pair with
         the walked ratio ``kappa / D`` -- and at no other. So one walk at the SLOWEST diffusivity a study needs,
         over the LONGEST time, serves every faster setting on that line at its shorter time as a view, and a
-        setting off the line needs its own walk. :attr:`~dmipy_replay.spec.Tissue.kappa` states the permeability
-        wanted and :attr:`~dmipy_replay.spec.Tissue.D` the diffusivity; given both, they must sit on the line.
+        setting off the line needs its own walk. :attr:`~dmipy_replay.spec.tissue.Tissue.kappa` states the permeability
+        wanted and :attr:`~dmipy_replay.spec.tissue.Tissue.D` the diffusivity; given both, they must sit on the line.
 
         A path walked at ``D0`` and read on a clock divided by ``a`` IS a path walked at ``a D0``: the stored bands
         carry the window's normalisation ``sqrt(2 / T)``, which the view divides by ``sqrt(a)``
@@ -648,10 +647,11 @@ class ReplayPack:
         ``a < 1``, past what the walk's block was chosen to keep below the floor. A published pack does
         not carry what would re-certify it, so a slower replay is refused rather than returned uncertified;
         walk the pack at the slower diffusivity. The acquisition must still fit the shortened walk, ``T / a``,
-        which the replay checks as it checks every waveform.
+        which the replay checks as it checks every waveform. The view at ``G(t)`` is the walk at ``G(a t) / a``, so the
+        envelope moves with it: its ``band_hz`` and its ``G_max`` times ``a``.
 
         The result is an ordinary :class:`ReplayPack` sharing this one's arrays, so :meth:`prefix`, the pose
-        cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.Tissue.D` on a replay
+        cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.tissue.Tissue.D` on a replay
         resolves to it. The two similarities, what each keeps, moves and refuses, side by side:
         ``docs/replay-guide/views.md``.
         """
@@ -682,6 +682,10 @@ class ReplayPack:
         cx = meta.get("compression") or {}
         if cx.get("temporal_bandwidth_hz") is not None:
             cx["temporal_bandwidth_hz"] = float(cx["temporal_bandwidth_hz"]) * a
+        acq = (meta.get("replay_envelope") or {}).get("acquisition") or {}
+        for key in ("band_hz", "G_max", "slew_max"):         # the view at G(t) is the walk at G(a t) / a: every frequency
+            if acq.get(key) is not None:                     # and the amplitude move by a (slew_max, a class header's, by a^2)
+                acq[key] = float(acq[key]) * (a * a if key == "slew_max" else a)
         pm = (cx.get("channels") or {}).get("susc_field_basis")
         if pm is not None:
             pm["T"] = float(pm["T"]) / a                     # the field's modes are read over the shorter window
@@ -742,11 +746,11 @@ class ReplayPack:
         ``s G`` (``gamma G . s x``). The surface term at a tissue's ``rho2`` is this pack's at ``rho2 / s``, since
         ``rho2 s ell / (s^2 D) = (rho2 / s) ell / D``. The relaxation gates and the compartment labels are
         unchanged, and so is the field path channel; the grid route reads the scaled positions against the
-        scaled grid. :attr:`~dmipy_replay.spec.Tissue.D` on a replay resolves against the view's diffusivity.
+        scaled grid. :attr:`~dmipy_replay.spec.tissue.Tissue.D` on a replay resolves against the view's diffusivity.
 
         Both directions are exact in the physics; what bounds ``s`` is the certificate. The view at ``G`` is the
-        walk at ``s G``, so the scanner class the pack is certified for (``replay_envelope.acquisition``) moves to
-        ``G_max / s`` and ``slew_max / s`` -- more than the pack states for ``s < 1``, less for ``s > 1`` -- and
+        walk at ``s G``, so the envelope the pack is certified for (``replay_envelope.acquisition``) moves to
+        ``G_max / s`` -- more than the pack states for ``s < 1``, less for ``s > 1``; its band, a frequency, stays -- and
         :meth:`_check_envelope` holds every replay to the moved limits, the view carrying no rule of its own; the
         contact tier's ``rho2_over_D_max`` moves to ``rho2_over_D_max / s`` the same way. The pair is recorded in
         ``provenance.length_scaled`` (``s`` cumulative over repeated views), with the battery's ``b_max`` over
@@ -793,7 +797,7 @@ class ReplayPack:
         if b_max is not None:
             acq["b_max"] = float(b_max) / (s * s)
         for key in ("G_max", "slew_max"):                                        # the view at G is this pack at s G
-            if acq.get(key) is not None:
+            if acq.get(key) is not None:                                         # (slew_max: a scanner-class header's)
                 acq[key] = float(acq[key]) / s
         tis = env.get("tissue") or {}
         if tis.get("rho2_over_D_max") is not None:
@@ -811,9 +815,9 @@ class ReplayPack:
         return type(self)(arrays, meta, source=self.source)
 
     def _check_envelope(self, waveform, field):
-        """The one check every replay route applies to a waveform against the pack's stated scanner class
-        (:func:`check_acquisition_envelope`): the per-axis gradient, the sampled slew, and the refocusing depth of
-        the field channel where ``field`` (the request's :class:`FieldTerm`) is active. A length-scaled view is held to
+        """The one check every replay route applies to a waveform against the pack's stated envelope
+        (:func:`check_acquisition_envelope`): the per-axis gradient and the refocusing depth of the field channel where
+        ``field`` (the request's :class:`FieldTerm`) is active; the band is :meth:`_check_band`'s. A length-scaled view is held to
         its moved limits by the same call. The field strength and the susceptibility reach their envelope in
         :func:`field_term`, which the routes call with :attr:`field_envelope`."""
         check_acquisition_envelope(self.meta, waveform, field_active=bool(field.active))
@@ -847,7 +851,7 @@ class ReplayPack:
 
     @property
     def nominal(self):
-        """The embedded spec's values as a :class:`~dmipy_replay.spec.Tissue`: what a paper's replay applies,
+        """The embedded spec's values as a :class:`~dmipy_replay.spec.tissue.Tissue`: what a paper's replay applies,
         ``replay(seq, tissue=pack.nominal, scanner=pack.nominal_field_T)``; ``None`` for a pack without a spec.
         Its ``T2`` / ``T1`` map the pools that declare one by name (``None`` when none does), so a spec that
         declares a T2 in some pools only gives a tissue the replay refuses, naming the rest."""
@@ -909,7 +913,7 @@ class ReplayPack:
 
         Three things describe a replay setting, each stated once:
 
-        * ``tissue`` -- **what the material is**: a :class:`~dmipy_replay.spec.Tissue` (pool T2 / T1, the walls'
+        * ``tissue`` -- **what the material is**: a :class:`~dmipy_replay.spec.tissue.Tissue` (pool T2 / T1, the walls'
           transverse ``rho2`` and longitudinal ``rho1``, the bulk D, the field source's chi) or ``None``, the
           bare diffusion signal. T2 / T1 are
           ``{pool name: seconds}`` over every pool of the embedded spec, ``inf`` for no decay. ``pack.nominal``
@@ -1106,15 +1110,15 @@ class ReplayPack:
         offset in the prescribed voxel, which is what a played spoiler winds across; a declared ``crusher`` is
         for a winding the waveform does not play in ``G``. The declared one is the voxel-scale spoiler, which a
         micron cell cannot produce geometrically -- a gradient cannot wind much beyond 2 pi across it -- so it
-        is modelled as the forward engine models it (:func:`~dmipy_replay.engine.bloch._build_crusher`): each
+        is modelled as the forward engine models it (dmipy-sim's ``engine.bloch._build_crusher``): each
         walker carries a macroscopic coordinate ``u`` in [0, 1) and accrues ``2 pi n_cycles u`` over each
         crusher window, so the ensemble dephases over ``n_cycles`` turns. Without it every coherence pathway
         of a pulse train stays degenerate and recombines, and the echo barely depends on the refocusing flip
         angle, which is not what a train does. ``crusher_seed`` draws those coordinates, so a replay of one
         pack and one sequence is reproducible.
 
-        ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS` (``"numpy"`` here, the reference; a
-        producer's subclass adds its device ones), all taking the same arguments.
+        ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS`: ``"numpy"``, the reference and the default, or
+        ``"jax"`` (the ``jax`` extra) where it is stated; both take the same arguments.
         """
         view = self._at_tissue(tissue)
         if view is not self:
@@ -1252,6 +1256,97 @@ class ReplayPack:
             return E if complex_signal else np.abs(E)
         S = E[:, 0] if single else E
         return S if complex_signal else np.abs(S)
+
+    def walker_primitives(self, acquisition, *, tol=PLAN_TOL, K=None, modes=None):
+        """What ``acquisition`` (a :class:`~dmipy_replay.replay.study.Acquisition`, or a sequence) leaves of every
+        walker before any tissue or scanner is applied -- the bands and the path channel contracted once, the
+        exposures and the contact read once: a :class:`~dmipy_replay.replay.study.Primitives`, whose ``signals(tissue,
+        scanner)`` is :meth:`walker_signals` for every pair without touching the bands again (dmipy-sim#297). The bands and
+        modes read are the plan's (``tol=``, ``K=``, ``modes=`` as in :meth:`replay`), recorded as ``Primitives.plan``. The
+        plan weighs the acquisition's gradient and gate; the tissue and the scanner are not yet known, so a field is
+        planned at the pack's certified envelope (its largest ``B0`` and ``chi``) -- the mode count :meth:`replay` reads as well, and a bound for every pair."""
+        from .study import walker_primitives
+        return walker_primitives(self, acquisition, tol=tol, K=K, modes=modes)
+
+    def study(self, study):
+        """The signal for every pair of a :class:`~dmipy_replay.replay.study.Study`, ``(pairs, n_meas)``: the
+        protocol's acquisitions contracted once each, every tissue and scanner applied elementwise."""
+        from .study import study_signals
+        return study_signals(self, study)
+
+    def pose_response(self, waveform, *, tissue=None, scanner=None, pose=None, compartment=None,
+                      method="auto", keep=None, cache=None, backend="numpy", device=None):
+        """The pack's response over every pose of its substrate, for one acquisition: a :class:`~dmipy_replay.replay.pose.PoseResponse` whose
+        coefficients a voxel's orientation distribution contracts against (RPH.md 6).
+
+        **Closed form, by default (#197).** For a single-direction encoding the response is a sum of plane waves in
+        each walker's rotated vector, and its harmonics are the Rayleigh expansion, computed per walker with no
+        rotation ever evaluated; with a field the response is that expansion times the field factor's, coupled
+        with the real Clebsch-Gordan tables. The band follows the walkers' phase amplitudes by construction and
+        nothing is chosen. ``keep = (lmax, nmax)`` restricts what is computed to what the composition retains: an
+        ODF or peaks composition keeps ``n = 0``, a frame keeps everything; ``None`` in either slot means the
+        response's own band.
+
+        **A magnet's own gradient** (``ScannerSequence.with_background_gradient``) is a second plane wave in each
+        walker's background vector, coupled to the first as the field factor is; the encoding beside it is what
+        must be one direction (dmrai-lab/dmipy-sim#565).
+
+        **The quadrature, by name.** An encoding whose moment matrix is not rank one -- a b-tensor or multi-axis
+        waveform -- has no plane-wave expansion, and takes the sampled route: the response evaluated on an SO(3)
+        quadrature sized to its phase amplitude, projected, and certified off the grid (``misfit``, a worst case).
+        ``method="quadrature"`` asks for it explicitly; ``method="closed"`` refuses what the closed form cannot
+        take rather than falling back. :attr:`PoseResponse.route` says which was used.
+
+        ``tissue`` and ``scanner`` are :meth:`replay`'s. The substrate's pose is not a knob here, since every pose
+        of it is what is being expanded; ``pose`` is the SPECIMEN's rigid rotation in the bore (a
+        :class:`~dmipy_replay.phantom.partition.Pose`; a bare matrix is ``Pose(R)``): the acquisition and the field turn into that
+        frame and the expansion runs there.
+
+        ``cache`` -- a directory (or ``True`` for ``$DMIPY_REPLAY_CACHE``, else ``~/.cache/dmipy-replay/pose``): the
+        expansion is written there under a key of the pack's digest, the acquisition on the pack's grid, the
+        resolved knobs, the frame, the method and the band, and read back instead of recomputed the next time
+        the same pack meets the same acquisition. Off unless asked for.
+
+        ``backend`` -- where the closed form's walker work runs: ``"numpy"`` on the host, ``"jax"`` on JAX's default
+        device, or ``"torch"`` on ``device`` (a torch device; CUDA when torch sees one, else its CPU), for a host that
+        has PyTorch and no JAX device (dmrai-lab/dmipy-sim#603). All compute the same expansion, its band and its
+        misfit, to float32 rounding; the quadrature route is the same on each. JAX and torch run only where they are
+        stated (the ``jax`` and ``torch`` extras); the expansion needs the ``pose`` extra (scipy).
+        """
+        return self.pose_responses([waveform], tissue=tissue, scanner=scanner, pose=pose, compartment=compartment,
+                                   method=method, keep=keep, cache=cache, backend=backend, device=device)[0]
+
+    def pose_responses(self, waveforms, *, tissue=None, scanner=None, pose=None, compartment=None,
+                       method="auto", keep=None, cache=None, backend="numpy", device=None):
+        """:meth:`pose_response` for a batch of acquisitions on this pack -- the encoding classes of a machine pass,
+        or one per voxel -- as one pass over the walkers per field factor: the closed form takes the single-direction
+        acquisitions of the batch that share a gate together (:func:`~dmipy_replay.replay.pose._pose_coeffs_closed_many`), the others take the
+        quadrature one by one. The knobs, the pose, the cache and the backend are as for :meth:`pose_response`;
+        returns one :class:`PoseResponse` per acquisition, in order (dmrai-lab/dmipy-sim#449)."""
+        from .pose import pose_responses
+        return pose_responses(self, waveforms, tissue=tissue, scanner=scanner, pose=pose, compartment=compartment,
+                              method=method, keep=keep, cache=cache, backend=backend, device=device)
+
+    def pose_series(self, waveforms, *, tissue=None, scanner=None, pose=None, compartment=None, keep=None, tol=1e-8,
+                    direction_tol=None, backend="numpy", device=None):
+        """The pose responses of a machine's encoding classes as one series (dmrai-lab/dmipy-sim#610): ONE pass over the
+        walkers for the whole set, then every class an evaluation. Returns a :class:`~dmipy_replay.replay.pose_series.PoseSeries`
+        whose :meth:`~dmipy_replay.replay.pose_series.PoseSeries.responses` are each class's :class:`PoseResponse`.
+
+        The classes of one timing class differ only in each row's amplitude and direction, the magnet's own gradient's
+        magnitude and direction, and each row's small departure from its commanded shape; the bodies of the closed form
+        depend on the amplitude and ``|g0|`` alone, so they are a Chebyshev series in both whose coefficients come from
+        the bodies at the series' nodes, and a class is that series at its own ``(amplitude, |g0|)`` with its exact lab
+        side. Every truncation and each row's departure is bounded and added to its misfit
+        (:mod:`~dmipy_replay.replay.pose_series` derives each bound).
+
+        ``waveforms`` -- the classes, an iterable read once (a generator keeps one composed class in memory at a time):
+        one timing class, refused by name otherwise. ``tissue``, ``scanner``, ``pose``, ``compartment``, ``keep``,
+        ``backend`` and ``device`` are :meth:`pose_responses`'; ``tol`` is each series' and band's truncation target,
+        ``direction_tol`` the largest departure a row may have from its shape (a tenth of the floor by default)."""
+        from .pose_series import pose_series
+        return pose_series(self, waveforms, tissue=tissue, scanner=scanner, pose=pose, compartment=compartment, keep=keep,
+                           tol=tol, direction_tol=direction_tol, backend=backend, device=device)
 
     def _field_along_walk(self, P, n_s):
         """The susceptibility off-resonance each walker sees on this window's ``n_s`` block ends, the field's stored
@@ -1653,24 +1748,39 @@ class ReplayPack:
         return windows * T_w, windows
 
     def _check_band(self, waveform):
-        """Refuse a waveform whose gradient needs more temporal band than this pack stores over the stretch it spans
-        (#277; :meth:`waveform_band`): the replay would otherwise return a smooth, plausible, wrong signal. A pack
-        that records no diffusivity (a synthetic master) cannot be judged and is not refused."""
+        """Refuse a waveform whose gradient needs more temporal band than this pack's envelope admits over the stretch
+        it spans (#277; :meth:`waveform_band`): the fewer of the bands it stores and ``ceil(2 band_hz T)`` of its
+        :attr:`envelope`. Beyond them the replay would return a smooth, plausible, wrong signal. A pack that records no
+        diffusivity (a synthetic master) cannot be judged and is not refused."""
         if self.diffusivity is None:
             return
         hz, bands, err = self.waveform_band(waveform)
         T, windows = self._span(_duration(waveform))
-        if bands <= self.K * windows:
+        env = self.envelope
+        stored = self.K * windows
+        admitted = min(stored, env.mode_count(T))
+        if bands <= admitted:
             return
         b = self.truncation_budget
         need = (f"more than {CONTINUOUS_BAND_CAP * self.K * windows / (2.0 * T):.4g} Hz over the {T * 1e3:.4g} ms it spans"
                 if not np.isfinite(hz) else f"{hz:.4g} Hz ({bands} bands over the {T * 1e3:.4g} ms it spans)")
+        if admitted < stored:
+            raise ValueError(f"the waveform's gradient reaches beyond the band of the envelope {env.name!r} this pack is "
+                             f"certified for: it needs {need} and the envelope admits band_hz = {env.band_hz:.4g} Hz "
+                             f"({admitted} bands){_view_of(self.meta)}. Replay a waveform within it")
         raise ValueError(f"the waveform's gradient reaches beyond this pack's temporal band: it needs {need} and the "
                          f"pack resolves {self.temporal_bandwidth_hz:.4g} Hz (K = {self.K} bands over {float(self.windows['T']) * 1e3:.4g} ms), "
                          f"which would drop up to {err:.2e} of the signal into phase the pack does not carry, against the "
                          f"{b['budget']:.2e} it may cost (its cap {b['cap']:.2e} from {b['cap_source']} less {b['other_terms']:.2e} "
-                         f"of other certified terms). Build a pack at this band or above "
-                         f"(build_replay_pack(temporal_bandwidth_hz=...)), or replay a waveform within this one")
+                         f"of other certified terms). Walk a pack whose envelope holds this band, or replay a waveform "
+                         f"within this one")
+
+    @property
+    def envelope(self):
+        """The :class:`~dmipy_replay.replay.envelope.Envelope` this pack is certified for
+        (:meth:`~dmipy_replay.replay.envelope.Envelope.from_header` of its header): what every replay is held to."""
+        from .envelope import Envelope
+        return Envelope.from_header(self.meta)
 
     @property
     def digest(self):
@@ -1876,11 +1986,13 @@ def _as_distribution(orientation):
     An :class:`~dmipy_replay.replay.fod.FOD` is read as an axis density with no statement about the substrate's own
     azimuth, which is what an ODF says.
     """
-    if orientation is None or isinstance(orientation, (list, tuple, np.ndarray)):
-        return None
-    raise NotImplementedError(f"orientation={type(orientation).__name__}: a distribution of poses is composed through the "
-                              "pose expansion, which this release does not carry yet; give one pose (a 3x3 rotation or "
-                              "the lab direction of the substrate's axis)")
+    from .fod import FOD
+    from .so3 import Distribution
+    if isinstance(orientation, Distribution):
+        return orientation
+    if isinstance(orientation, FOD):
+        return Distribution.axis_density(orientation)
+    return None
 
 
 def _duration(waveform):
@@ -1897,7 +2009,6 @@ def _echo_blocks(waveform, dt_pack):
         return None
     return [int(round(i * float(waveform.dt) / float(dt_pack))) for i in readout]
 
-_AXIS_MAPS = {}
 
 
 def compile_scheme(G, dt, K, gyromagnetic_ratio=GAMMA, *, T=None, method=None):
@@ -1948,13 +2059,9 @@ def truncation_budget(meta, *, floor, floor_source):
 
 CONTINUOUS_BAND_CAP = 64
 
-TORCH_GROUPS = 128
 
-SHELL_RTOL = 1e-3
 
-SHELL_SERIES_TOL = 1e-14
 
-SHELL_SERIES_MAX_PHASE = 10.0
 
 
 def _container_of(ranges):
@@ -2010,7 +2117,7 @@ def _band_phase(P, W=None):
 def _path_field_channels(P, waveform):
     """``(Psi, names)``: the C3 path channel's gated field integrals per walker under the prepared acquisition,
     summed over the windows -- the ONE read of that channel, which
-    :func:`~dmipy_replay.fields.hollow_cylinder.field_terms` turns into the isotropic and anisotropic terms for
+    dmipy-sim's ``fields.hollow_cylinder.field_terms`` turns into the isotropic and anisotropic terms for
     :meth:`ReplayPack._walker_phases` and :func:`~dmipy_replay.replay.study.walker_primitives` alike."""
     from .field import path_field_integral
     pm = P["ch"]["susc_field_basis"]

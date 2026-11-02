@@ -29,10 +29,6 @@ class EventList:
     def counts(self):
         return np.diff(self.offsets)
 
-    def __iter__(self):
-        """The list as its three arrays, ``offsets, t, label = events`` (RPK.md 9.5.7's tensors)."""
-        return iter((self.offsets, self.t, self.label))
-
     def take(self, idx):
         """The lists of the walkers ``idx``, in that order."""
         idx = np.asarray(idx, np.int64)
@@ -55,7 +51,7 @@ class EventList:
         return EventList(np.concatenate(offs), np.concatenate([ev.t for ev in lists]), np.concatenate([ev.label for ev in lists]))
 
     def __iter__(self):
-        """``offsets, t, label = events``: the three arrays, in that order."""
+        """``offsets, t, label = events``: the three arrays, in that order (RPK.md 9.5.7's tensors)."""
         return iter((self.offsets, self.t, self.label))
 
     def __eq__(self, other):
@@ -72,6 +68,7 @@ def events_label_at(events, start, t):
     out = np.array(start, copy=True)
     if events is None or events.n_events == 0:
         return out
+    w = np.repeat(np.arange(events.n_walkers), events.counts)        # the walker of every event
     sel = events.t <= float(t)
     if not sel.any():
         return out

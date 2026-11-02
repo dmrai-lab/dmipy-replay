@@ -1,10 +1,11 @@
-"""State a scanner class in the header of every fixture pack and columnar layout under ``tests/data``.
+"""State an envelope in the header of every fixture pack and columnar layout under ``tests/data``.
 
-A replay is held to the scanner class its pack states (``replay_envelope.acquisition``: ``bound`` ``"scanner_class"``,
-``scanner``, ``G_max``, ``slew_max``), and the fixtures are walked without one. They are stamped with a class wide enough
-for every scenario of ``tests/scenarios.py`` -- the square-lobe scenarios switch within one sample, a slew of ``G / dt`` --
-so the numbers they compare are unchanged and only the header gains the class. Run from the repository root after
-``tools/make_fixtures.py`` / ``tools/make_columnar_fixtures.py``; stamping twice is a no-op.
+A replay is held to the envelope its pack states (``replay_envelope.acquisition``: ``bound`` ``"envelope"``, ``name``,
+``band_hz``, ``G_max``, ``B0_list``), and the fixtures are walked without one. They are stamped with a ``G_max`` wide
+enough for every scenario of ``tests/scenarios.py`` and the band each fixture stores (the class fields below, read by
+:func:`stamp_envelope.stamp_meta`), so the numbers they compare are unchanged and only the header gains the envelope.
+Run from the repository root after ``tools/make_fixtures.py`` / ``tools/make_columnar_fixtures.py``; stamping twice is
+a no-op.
 
     python tools/stamp_fixtures.py
 """
@@ -14,18 +15,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 from dmipy_replay.replay.container import read_safetensors, write_safetensors  # noqa: E402
+from stamp_envelope import stamp_meta  # noqa: E402
 
 DATA = ROOT / "tests" / "data"
 
-#: the stamped class: an explicit limit point, far above the scenarios' gradients and square-lobe slews
-FIXTURE_CLASS = dict(bound="scanner_class", scanner="fixture", G_max=10.0, slew_max=1e9)
+#: the stamped class: an explicit limit point, far above the scenarios' gradients, read as an envelope at each
+#: fixture's stored band
+FIXTURE_CLASS = dict(bound="scanner_class", scanner="fixture", G_max=10.0)
 
 
 def stamp(meta):
-    """``meta`` with the fixture class in ``replay_envelope.acquisition``."""
-    meta.setdefault("replay_envelope", {}).setdefault("acquisition", {}).update(FIXTURE_CLASS)
-    return meta
+    """``meta`` with the fixture's envelope in ``replay_envelope.acquisition``."""
+    acq = meta.setdefault("replay_envelope", {}).setdefault("acquisition", {})
+    if acq.get("bound") != "envelope":
+        acq.update(FIXTURE_CLASS)
+    return stamp_meta(meta)[0]
 
 
 def main():

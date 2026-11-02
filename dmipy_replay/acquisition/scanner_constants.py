@@ -3,7 +3,7 @@
 The hardware + safety limits that bound a *deliverable* acquisition — gradient
 (max amplitude, slew, raster), RF (peak B1, raster), and safety (IEC SAR / B1+rms /
 PNS) — per vendor and model.  This is the acquisition-side analogue of
-:mod:`dmipy_replay.substrate.biophysical_constants`: **the one home of every scanner
+dmipy-sim's ``substrate.biophysical_constants``: **the one home of every scanner
 number in the ecosystem**. :class:`dmipy_replay.acquisition.scanners.ScannerLimits` is the
 typed view a consumer takes; the certificate's class table ``SCANNERS`` and the Pulseq
 ``PULSEQ_SYSTEMS`` presets are derived from here at import, never written by hand; the

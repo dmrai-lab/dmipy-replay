@@ -1,6 +1,7 @@
 """The package is numpy and the standard library: importing it, reading a pack, replaying it, reading a ``.seq`` and
-building from a b-value table and imaging a columnar
-layout load nothing else."""
+building from a b-value table, imaging a columnar
+layout, importing every module of the pose replay, the study and the phantoms (and reading the names they bring to the
+package) load nothing else."""
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +23,13 @@ from_pulseq({str(ROOT / 'tests' / 'data' / 'seq' / 'foreign_sinc_se.seq')!r})
 from dmipy_replay import from_btable
 lay = dr.open_columnar({str(ROOT / 'tests' / 'data' / 'columnar_quant')!r})
 lay.image(dr.pgse([[1, 0, 0]], 0.6e-3, 1.8e-3, bvalues=[1e9], n_t=401, slew_rate=float("inf"), TE=4e-3))
+import dmipy_replay._blas, dmipy_replay.replay.phases, dmipy_replay.replay.pose, dmipy_replay.replay.pose_device
+import dmipy_replay.replay.pose_series, dmipy_replay.replay.bloch_jax, dmipy_replay.replay.jax_routes
+import dmipy_replay.replay.study, dmipy_replay.replay.pathways, dmipy_replay.replay.time_segments_backends
+import dmipy_replay.phantom, dmipy_replay.replay.phantom
+dr.Distribution, dr.FOD, dr.PoseResponse, dr.Study
+from dmipy_replay.replay.compression import resolve_device
+resolve_device("numpy")
 print(sorted({{m.split('.')[0] for m in sys.modules}} & set({HEAVY!r})))
 """
     out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, check=True).stdout

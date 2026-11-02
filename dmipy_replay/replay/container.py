@@ -65,29 +65,49 @@ def read_safetensors(path):
     return arrays, meta
 
 
+#: the order safetensors lays tensors out in, by dtype (then by name): the reference writer's (``safetensors.serialize``)
+_ST_ORDER = ("U64", "I64", "F64", "F32", "U32", "I32", "F16", "U16", "I16", "I8", "U8", "BOOL")
+_WRITE_BYTES = 1 << 26                  #: the largest piece of a tensor written at once (bytes)
+
+
 def write_safetensors(path, arrays, metadata=None):
-    """Write ``arrays`` (name -> ndarray) and the string map ``metadata`` as a safetensors file at ``path``: tensors in
-    name order, each C-contiguous little-endian, the header padded with spaces to a multiple of 8 bytes."""
-    names = sorted(arrays)
-    tens = {}
-    for k in names:
-        a = np.ascontiguousarray(arrays[k])
-        if a.dtype.byteorder == ">":
-            a = a.astype(a.dtype.newbyteorder("<"))
-        if a.dtype.str not in _NAMES:
-            raise TypeError(f"{k}: dtype {a.dtype} has no safetensors name")
-        tens[k] = a
-    header, off = {}, 0
-    for k in names:
-        nb = tens[k].nbytes
-        header[k] = {"dtype": _NAMES[tens[k].dtype.str], "shape": list(tens[k].shape), "data_offsets": [off, off + nb]}
-        off += nb
-    if metadata:
-        header["__metadata__"] = {str(k): str(v) for k, v in metadata.items()}
-    hb = json.dumps(header, separators=(",", ":")).encode()
-    hb += b" " * (-len(hb) % 8)
-    with open(os.fspath(path), "wb") as f:
-        f.write(len(hb).to_bytes(8, "little"))
-        f.write(hb)
-        for k in names:
-            f.write(tens[k].tobytes())
+    """Write ``arrays`` (name -> ndarray, or a list of ndarrays stored as their concatenation along the first axis, as a
+    merge stores its shards' tensors) and the string map ``metadata`` as a safetensors file at ``path``. The file is
+    byte for byte what ``safetensors.numpy.save_file`` writes for the contiguous arrays (a 0-d array stored as one
+    element, as ``np.ascontiguousarray`` makes it): the header's ``__metadata__`` first and the tensors in their data
+    order -- by dtype as :data:`_ST_ORDER`, then by name -- compact, padded with spaces to eight bytes, the data
+    little-endian. The tensors are streamed in pieces of at most :data:`_WRITE_BYTES` into a sibling file that replaces
+    ``path`` once complete: a pack mapped from ``path`` (:func:`read_safetensors`) keeps reading the file it was mapped
+    from."""
+    import struct
+    parts = {k: [np.ascontiguousarray(x) for x in (v if isinstance(v, (list, tuple)) else [v])] for k, v in arrays.items()}
+    head = {}
+    for k, ps in parts.items():
+        dt = ps[0].dtype
+        if any(x.dtype.name != dt.name or x.shape[1:] != ps[0].shape[1:] for x in ps):
+            raise ValueError(f"the pieces of tensor {k!r} differ in dtype or row shape")
+        name = _NAMES.get(dt.newbyteorder("<").str)
+        if name is None:
+            raise TypeError(f"tensor {k!r} is {dt}, which safetensors does not store")
+        head[k] = dict(dtype=name, shape=[sum(int(x.shape[0]) for x in ps)] + [int(d) for d in ps[0].shape[1:]])
+    order = sorted(head, key=lambda k: (_ST_ORDER.index(head[k]["dtype"]), k))
+    off = 0
+    for k in order:
+        nb = sum(int(x.nbytes) for x in parts[k])
+        head[k]["data_offsets"] = [off, off + nb]; off += nb
+    md = {"__metadata__": {str(k): str(v) for k, v in metadata.items()}} if metadata else {}
+    h = json.dumps(dict(**md, **{k: head[k] for k in order}), separators=(",", ":"), ensure_ascii=False).encode()
+    h += b" " * (-len(h) % 8)
+    tmp = f"{os.fspath(path)}.{os.getpid()}.part"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(struct.pack("<Q", len(h))); f.write(h)
+            for k in order:
+                for x in parts[k]:
+                    step = max(1, _WRITE_BYTES // max(1, x.nbytes // max(1, len(x))))
+                    for i in range(0, len(x), step):
+                        f.write(np.ascontiguousarray(x[i:i + step], x.dtype.newbyteorder("<")).tobytes())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)

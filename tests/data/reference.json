@@ -54,7 +54,7 @@
   "band_budget_field"
  ],
  "failed": {
-  "band_beyond": "ValueError: the waveform's gradient reaches beyond this pack's temporal band: it needs 3138 Hz (251 bands over the 40 ms it spans) and the pack resolves 800 Hz (K = 64 bands over 40 ms), which would drop up to 9.97e-02 of the signal into phase the pack does not carry, against the 4.20e-02 it may cost (its cap 4.20e-02 from fidelity.floor_max less 0.00e+00 of other certified terms). Build a pack at this band or above (build_replay_pack(temporal_bandwidth_hz=...)), or replay a waveform within this one",
+  "band_beyond": "ValueError: the waveform's gradient reaches beyond this pack's temporal band: it needs 3138 Hz (251 bands over the 40 ms it spans) and the pack resolves 800 Hz (K = 64 bands over 40 ms), which would drop up to 9.97e-02 of the signal into phase the pack does not carry, against the 4.20e-02 it may cost (its cap 4.20e-02 from fidelity.floor_max less 0.00e+00 of other certified terms). Walk a pack whose envelope holds this band, or replay a waveform within this one",
   "field_beyond_envelope": "ValueError: B0 = 11.7 T is beyond the 7 T this pack's field tier is certified at (replay_envelope.acquisition.B0_list): replay within it"
  }
 }

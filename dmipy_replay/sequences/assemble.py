@@ -50,7 +50,7 @@ from ..acquisition.rf import RFEvent, RFSchedule
 from ..acquisition.scanner_sequence import Encoding, ScannerSequence
 from ..constants import resolve_slew
 from ..math.gradient_conversions import q_from_g
-from ._helpers import _calc_b_from_waveform
+from ..acquisition.waveforms import b_from_gradient
 
 __all__ = ["trapezoid", "trapezoid_train", "cosine", "bipolar", "axis_pairs",
            "SpinEcho", "StimulatedEcho", "GradientEcho", "EchoTrain", "PreparedEchoTrain",
@@ -492,23 +492,23 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
         G, dt, schedule, sign, te, te_min = _build(g, g)
     else:
         G, dt, schedule, sign, te, te_min = _build(np.zeros(n_m), np.ones(n_m))   # square unit blocks seed the amplitude
-        b_unit = _calc_b_from_waveform(G * sign, dt)
+        b_unit = b_from_gradient(G * sign, dt)
         g = np.where((b_target > 0) & (b_unit > 0), np.sqrt(b_target / np.where(b_unit > 0, b_unit, 1.0)), 0.0)
         for _ in range(_B_ITER):                                      # the ramps follow the amplitude
             G, dt, schedule, sign, te, te_min = _build(g, g)
-            b_num = _calc_b_from_waveform(G * sign, dt)
+            b_num = b_from_gradient(G * sign, dt)
             live = (b_target > 0) & (b_num > 0)
             scale = np.where(live, np.sqrt(b_target / np.where(b_num > 0, b_num, 1.0)), 1.0)
             g = g * scale
             if np.all(np.abs(scale - 1.0) < _B_RTOL):
                 break
         # the declared b IS the numeric b of the effective gradient the walk integrates
-        b_num = _calc_b_from_waveform(G * sign, dt)
+        b_num = b_from_gradient(G * sign, dt)
         live = (b_target > 0) & (b_num > 0)
         scale = np.where(live, np.sqrt(b_target / np.where(b_num > 0, b_num, 1.0)), 1.0)
         G = G * scale[:, None, None]
         g = g * scale
-    b_out = _calc_b_from_waveform(G * sign, dt) if b_target is None else b_target
+    b_out = b_from_gradient(G * sign, dt) if b_target is None else b_target
     extra = {} if encoding is None else dict(encoding(g, te, te_min))
     q = None if q_width is None else q_from_g(g, np.broadcast_to(np.asarray(q_width, np.float64), (n_m,)))
     enc = Encoding(bvalues=b_out, gradient_directions=dirs, TE=np.full(n_m, te), qvalues=q, gradient_strengths=g,

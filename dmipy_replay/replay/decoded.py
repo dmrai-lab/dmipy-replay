@@ -3,7 +3,7 @@
 A pack stores its position bands, contact bands, field modes and occupancy events quantised and bit-packed; every
 reader contracts the dequantised floats. :class:`PackArrays` is the ``dict`` of a pack's tensors with a
 :class:`DecodedCache` beside it, and the readers in :mod:`~dmipy_replay.replay.compression`
-(:func:`~dmipy_replay.replay.compression.read_position_coeffs`, :func:`~dmipy_replay.replay.compression.susc_path_coeffs`,
+(:func:`~dmipy_replay.replay.compression.read_position_coeffs`, :func:`~dmipy_replay.replay.field.susc_path_coeffs`,
 :func:`~dmipy_replay.replay.compression.bridge_bands`, :func:`~dmipy_replay.replay.compression.occupancy_events`) decode a
 tensor selection once and return the same read-only array to every later call that reads it.
 

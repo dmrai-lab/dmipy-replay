@@ -54,7 +54,8 @@ word decoded where it is read, float32 phases written out as products, complex64
 and accumulator. ``tissue=`` / ``scanner=`` / ``b0_direction=`` turn the tiers into exactly
 :meth:`~dmipy_replay.replay.primitives.Primitives.reduction_terms`: the row weight ``amp exp(-tau_2 / T2_pool -
 tau_1 / T1_pool + (rho2 / D) c)`` and the phase ``B0 (chi_iso A + chi_aniso B)``. The arithmetic runs on a backend of
-:data:`BACKENDS` (``"numpy"`` here); a backend is the same arithmetic on another array library and device.
+:data:`BACKENDS` (``"numpy"``, the default; ``"jax"`` and ``"torch"`` where stated, the ``jax`` and ``torch`` extras,
+:mod:`~dmipy_replay.replay.time_segments_backends`); a backend is the same arithmetic on another array library and device.
 """
 from __future__ import annotations
 
@@ -568,7 +569,7 @@ class TimeSegmentLayout:
     TILES = 4096                                                        # tiles per device chunk (2^19 rows)
     MEAS = 64                                                           # measurements padded to a multiple
     #: the backends :meth:`image` and :meth:`tier_maps` run on, by name, and the one ``backend=None`` names
-    BACKENDS = None                                                     # set below: {"numpy": NumpyBackend()}
+    BACKENDS = None                                                     # set below: numpy, jax, torch
     DEFAULT_BACKEND = "numpy"
 
     def _backend(self, name):
@@ -784,8 +785,8 @@ class TimeSegmentLayout:
         in the substrate frame), or ``None`` when the group stores no field or the pair's field scales are both zero:
         ``(layout, scale, coef, n_iso)``, the stored channels of the basis's twelve (RPK.md 5.3: ``iso_local``,
         ``iso_P`` xx, yy, xy, xz, yz, ``aniso_G`` (6)) in that order, their places in the words, their scales and their
-        contraction weights in float64 -- :func:`~dmipy_replay.fields.hollow_cylinder.iso_weights` on the six isotropic
-        channels (``iso_P_zz`` folded in by the trace identity, never formed), :func:`~dmipy_replay.fields.hollow_cylinder.q_of_H`
+        contraction weights in float64 -- dmipy-sim's ``fields.hollow_cylinder.iso_weights`` on the six isotropic
+        channels (``iso_P_zz`` folded in by the trace identity, never formed), dmipy-sim's ``fields.hollow_cylinder.q_of_H``
         on the six anisotropic ones -- and how many of them are isotropic. A channel that rounds to zero on every row
         (not stored) contributes nothing."""
         from .field import iso_weights, q_of_H
@@ -904,6 +905,36 @@ class TimeSegmentLayout:
             raise ValueError("this layout holds no background vectors: a magnet's own gradient needs them "
                              "(segment_rows(..., background=True))")
         return g
+
+    def delivery(self, sequence, scanner, grid=None, *, partition=None, to_scanner=None, nonlinearity=True, background=True,
+                 concomitant=True, transmit=True):
+        """What ``scanner`` (a :class:`~dmipy_replay.acquisition.scanners.ScannerLimits`) plays at every voxel with rows when
+        the layout's grid sits in its bore as ``grid`` says (the layout's own grid, whose isocenter is the grid centre,
+        when None; :meth:`~dmipy_replay.phantom.Grid.centred_at` moves it), for ``sequence`` on its stored partition:
+        :func:`~dmipy_replay.phantom.bore.delivered_vectors` of each segment's commanded plateau at :attr:`live_voxels`,
+        for :meth:`image`'s ``delivered``. The term switches are those of
+        :func:`~dmipy_replay.phantom.bore.delivered_gradient` and ``transmit``."""
+        from ..phantom.bore import delivered_vectors
+        grid = self.grid if grid is None else grid
+        if tuple(grid.shape) != tuple(self.grid.shape):
+            raise ValueError(f"the grid placed in the bore is the layout's own ({tuple(self.grid.shape)}), got {tuple(grid.shape)}")
+        name, L = self.fit(sequence, partition)
+        if not self.partitions[name].is_constant:
+            raise ValueError(f"partition {name!r} has shaped terms: a machine's delivered gradient (its Maxwell term is "
+                             "quadratic in the waveform) is one vector per constant segment, not per shape")
+        e = np.asarray(self.partitions[name].gate, np.float64)
+        plateau = L * np.where(e == 0.0, 0.0, e)[None, :, None]          # the commanded (physical) gradient: e = +-1
+        live = self.live_voxels
+        ijk = np.stack(np.unravel_index(live, tuple(self.grid.shape)), axis=1)
+        d = delivered_vectors(scanner, grid, plateau, e, voxels=ijk, to_scanner=to_scanner, nonlinearity=nonlinearity,
+                              background=background, concomitant=concomitant, transmit=transmit)
+        durations = self.partitions[name].durations
+        net = np.abs(np.einsum("vmsc,s->vmc", d.q, durations)).max(initial=0.0)
+        if net > _RTOL * (float(np.abs(d.q).max(initial=0.0)) or 1.0) * float(durations.sum()):
+            raise ValueError("the machine's delivered gradient leaves a net moment at the readout (a Maxwell term "
+                             "the encoding does not refocus, as a bipolar pair's does not): a segment vector is the path "
+                             "relative to the walker's start, which only a refocused encoding does not see")
+        return Delivered(partition=name, voxels=live, levels=L, q=d.q, g0=d.g0, kappa=d.kappa)
 
     def tier_maps(self, partition, tissue=None, scanner=None, *, backend=None, device=None, resident=True,
                   b0_direction=(0.0, 0.0, 1.0)):
@@ -1233,4 +1264,6 @@ class NumpyBackend:
     voxel_sums = staticmethod(_voxel_sums_numpy)
 
 
-TimeSegmentLayout.BACKENDS = {"numpy": NumpyBackend()}
+from .time_segments_backends import JaxBackend, TorchBackend  # noqa: E402  (they read this module's kernels)
+
+TimeSegmentLayout.BACKENDS = {"numpy": NumpyBackend(), "jax": JaxBackend(), "torch": TorchBackend()}

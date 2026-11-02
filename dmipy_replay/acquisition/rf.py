@@ -397,7 +397,7 @@ class RFEvent:
     ``chi_perp`` follows on the ``ScannerSequence`` that carries the schedule.
 
     :meth:`flip_split` is the one place a pulse becomes what a grid does with it; both rasterisers
-    (:func:`dmipy_replay.engine.bloch._build_rf_schedule`, :func:`dmipy_replay.replay.trajectories._bloch_timeline`)
+    (dmipy-sim's ``engine.bloch._build_rf_schedule``, dmipy-sim's ``replay.trajectories._bloch_timeline``)
     read it, so a hard pulse, a finite hard pulse and a shaped pulse are the same object at three settings.
     A sequence's pulses live in an :class:`RFSchedule`.
     """
@@ -565,7 +565,12 @@ class RFSchedule(tuple):
         """The number of refocusing pulses of the schedule: the pulses the coherence state machine reads as a
         refocus (a ``refocus`` label, or an unlabelled 180 while transverse). Excitation, store and recall are not
         counted."""
-        return sum(1 for _, role in self._roles()[0] if role == "refocus")
+        return len(self.refocusing_times)
+
+    @property
+    def refocusing_times(self):
+        """``(n,)`` the instants (s) of the schedule's refocusing pulses (:attr:`n_refocusing` of them), in time order."""
+        return np.array([e.t_s for e, role in self._roles()[0] if role == "refocus"], np.float64)
 
     def sign(self, t_grid):
         """The sign of the EFFECTIVE gradient over ``t_grid`` -- ``(len(t_grid),)`` of +-1: the spin-echo gate
@@ -681,7 +686,7 @@ class RFSchedule(tuple):
         ``sin^2(theta)``, a store tips the plane onto z as ``cos^2(theta)``, with ``theta`` running 0 to pi/2
         across the pulse; a 180 keeps the component along B1 transverse and swings the perpendicular one through
         z, ``1/2 + cos^2(theta)/2`` with ``theta`` 0 to pi -- a quarter of the pulse spent longitudinal in all,
-        the ensemble mean of :func:`dmipy_replay.replay.trajectories.finite_180_longitudinal_dwell`. The mask is
+        the ensemble mean of dmipy-sim's ``replay.trajectories.finite_180_longitudinal_dwell``. The mask is
         then float; a schedule of hard pulses keeps the binary one. It weighs relaxation; a phase accrues through
         :meth:`transverse_gate`.
         """

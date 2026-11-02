@@ -1,14 +1,7 @@
-"""The few helpers the builders and the assembler share: the b integral of a gradient array, the echo-time
-floor, the per-row broadcast of delta / Delta / TE."""
+"""The helpers the builders share: the echo-time floor and the per-row broadcast of delta / Delta / TE."""
 import numpy as np
 
 _TE_FLOOR_ATOL = 1e-9
-
-
-def _calc_b_from_waveform(G, dt):
-    """b per measurement, ``(n_m, n_t, 3) -> (n_m,)``: :func:`dmipy_replay.acquisition.waveforms.b_from_gradient`."""
-    from ..acquisition.waveforms import b_from_gradient
-    return b_from_gradient(G, dt)
 
 
 def _resolve_te(TE, t_total_min, n_m):

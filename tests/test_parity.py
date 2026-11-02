@@ -1,5 +1,5 @@
 """Every scenario of ``scenarios.py`` replayed here against dmipy-sim's own replay of the same pack
-(``tools/make_fixtures.py``): the code is the same code, so the numbers are the same to rounding."""
+(``data/reference.json``, recorded at dmipy-sim ``8d7b97f`` and frozen): the code is the same code, so the numbers are the same to rounding."""
 import json
 from pathlib import Path
 from types import SimpleNamespace

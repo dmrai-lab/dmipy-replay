@@ -1,4 +1,4 @@
-"""The native ``.seq`` reader against dmipy-sim's pypulseq-based one (``tools/make_pulseq_fixtures.py``): the same
+"""The native ``.seq`` reader against dmipy-sim's pypulseq-based one (the ``.seq`` files and readings of ``data/seq``, recorded with dmipy-sim and frozen): the same
 gradient on the same grid, the same readout, the same RF instants; and every pulse's flip as pypulseq computes it
 from the file's own samples, which sim's reader does not read (it takes 90 / 180 for an excitation / refocusing)."""
 import json

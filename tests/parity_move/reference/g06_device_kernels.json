@@ -1,0 +1,116 @@
+{
+ "entries": {
+  "jax/bessel_tails": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "1507fd07c89711b075a102e913e5443a710bc77e853935d99fac379825ee9098",
+   "shape": [
+    13,
+    3
+   ]
+  },
+  "jax/pose_samples": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "3293ea204f922b0ca9f74e235bc5a64c1cd50587c6944fdc1e83204f16728c9a",
+   "shape": [
+    3,
+    2
+   ]
+  },
+  "jax/pose_samples/field": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "67251ad495631219387ce141c26c18c976bd80e309e10ef5c229ae6c6bab2631",
+   "shape": [
+    3,
+    2
+   ]
+  },
+  "jax/real_sh": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "9d5e5cf1aa769653d7f69703bac476afa8b9c0544de8c943d607bf2f47899502",
+   "shape": [
+    300,
+    81
+   ]
+  },
+  "jax/spherical_jn_all": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "1ae98d87b705febed4dce3035124381596725ef82f92bded14bfb828f162b521",
+   "shape": [
+    9,
+    300
+   ]
+  },
+  "numpy/bessel_tails": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "8f00255ec3337a711fe312b4ca9337c1c6da3e591f125ce18be6326106234058",
+   "shape": [
+    13,
+    3
+   ]
+  },
+  "numpy/pose_samples": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "54886e883368e5d1b0fb6172203af6ad4cedc3f4d27b941b30e8ff3858e449c2",
+   "shape": [
+    3,
+    2
+   ]
+  },
+  "numpy/pose_samples/field": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "3b51e260a9641a8e2fc19a0e98500dc9a55aaf98f220b65fc09f998a76739e75",
+   "shape": [
+    3,
+    2
+   ]
+  },
+  "numpy/real_sh": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "b7013e2eb37c4f9bc0f355150bde8d4243528d2a1ac847ab21a68393a5e1fb76",
+   "shape": [
+    300,
+    81
+   ]
+  },
+  "numpy/spherical_jn_all": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "d3b075d959d0dbeaadd91c95a8bd50af609ca2165bdbc86d82d29956d74b178b",
+   "shape": [
+    9,
+    300
+   ]
+  },
+  "torch:cpu/bessel_tails": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "21805fbb3c055ff08f9b781d5186cc3a58e508e4778d92f75039d369ede95a36",
+   "shape": [
+    13,
+    3
+   ]
+  }
+ },
+ "seconds": 2.2355159209982958,
+ "status": "ok"
+}

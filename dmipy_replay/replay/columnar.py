@@ -7,7 +7,7 @@ downloaded whole, and every byte fetched is one the replay uses.
 
     pack = open_columnar("hf://SubstrateCommons/disco-replay/disco")
     plan = pack.plan(seq, tissue=..., scanner=...)            # bands, modes, tiers, bytes: before any transfer
-    plan = pack.plan_for_class("prisma")                       # what every waveform a Prisma can play needs
+    plan = pack.plan_for_envelope(envelope_of("prisma"))       # what every waveform a Prisma can play needs
     view = pack.view(K=32, voxels=[(20, 20, 20)])              # one voxel's rows at 32 bands: an ordinary ReplayPack
     S, floor, plan = pack.image([seq], settings=[(None, None), (tissue, 3.0)])   # every setting's volume, one pass
 
@@ -33,6 +33,7 @@ __all__ = ["ColumnarPack", "open_columnar", "Source"]
 POOL_KEY = "comp_static"
 RETRIES = 6
 SLAB_ROWS = 1 << 15         #: rows whose exponential is formed at once in the numpy voxel sums
+_ROWS, _SEGS = 1 << 16, 256                                     # rows and voxel runs padded to multiples: few compiled shapes
 
 
 def _grid_of(meta):
@@ -127,20 +128,47 @@ def _numpy_voxel_sums(phi, ew, starts):
     return out
 
 
+def _jax_voxel_sums():
+    """The JAX voxel sums (``(phi, ew, starts) -> (n_seg, n_meas)`` complex128, :attr:`ColumnarPack.IMAGE_BACKENDS`):
+    ``sum_rows ew exp(i phi)`` over each run of rows that begins at ``starts``, a ``segment_sum`` in double precision
+    on the JAX device, the rows and runs padded to multiples so that a few shapes compile."""
+    import functools
+    from .._extras import need
+    jax = need("jax")
+    jnp = jax.numpy
+
+    @functools.partial(jax.jit, static_argnums=3)
+    def voxel_sums(phi, ew, seg, n_seg):
+        return jax.ops.segment_sum(jnp.exp(1j * phi) * ew[:, None], seg, num_segments=n_seg)
+
+    def sums(phi, ew, starts):
+        was_x64 = bool(jax.config.read("jax_enable_x64"))
+        jax.config.update("jax_enable_x64", True)
+        try:
+            n, n_seg = len(phi), len(starts)
+            seg = np.repeat(np.arange(n_seg), np.diff(np.r_[starts, n]))
+            n_pad = -(-n // _ROWS) * _ROWS; s_pad = -(-(n_seg + 1) // _SEGS) * _SEGS   # a spare segment takes the padding
+            seg_p = np.full(n_pad, n_seg, np.int32); seg_p[:n] = seg
+            p = np.zeros((n_pad, phi.shape[1])); p[:n] = phi
+            e = np.zeros(n_pad); e[:n] = ew
+            return np.asarray(voxel_sums(jnp.asarray(p), jnp.asarray(e), jnp.asarray(seg_p), s_pad))[:n_seg]
+        finally:
+            jax.config.update("jax_enable_x64", was_x64)
+    return sums
+
+
 class ColumnarPack:
     """A pack in the columnar layout, open by reference. ``meta`` is the merged pack's header, ``columns`` the byte
     layout of every column (its parts), ``index`` the row range of every (voxel, pool), ``grid`` the certificate's
     grid, ``floor`` the certificate's median per-voxel floor.
 
-    :attr:`pack_class` is the class a :meth:`view` is (a producer's subclass of
-    :class:`~dmipy_replay.replay.replay.ReplayPack` sets its own), and :attr:`IMAGE_BACKENDS` the reductions
-    :meth:`image` can form its voxel sums with, ``"numpy"`` here."""
+    A :meth:`view` is a :class:`~dmipy_replay.replay.replay.ReplayPack`; :attr:`IMAGE_BACKENDS` are the reductions
+    :meth:`image` can form its voxel sums with, ``"numpy"`` (the default) and ``"jax"``."""
 
-    IMAGE_BACKENDS = {"numpy": lambda: _numpy_voxel_sums}
+    IMAGE_BACKENDS = {"numpy": lambda: _numpy_voxel_sums, "jax": _jax_voxel_sums}
 
     def __init__(self, uri, *, revision="main", workers=8):
-        from .replay import ReplayPack, _refuse_predating
-        self.pack_class = ReplayPack
+        from .replay import _refuse_predating
         self.uri = uri; self.src = Source(uri, revision=revision, workers=workers)
         m = json.loads(self.src.text("manifest.json")); self.meta, self.columns = m["meta"], m["columns"]
         _refuse_predating(self.meta, uri, tensors=list(self.columns))
@@ -193,37 +221,48 @@ class ColumnarPack:
         floor on every measurement, and that truncation's bound, by the rule of :mod:`~dmipy_replay.replay.planning`
         (:func:`~dmipy_replay.replay.planning.band_tail` and :func:`~dmipy_replay.replay.planning.fewest`): the stored bands
         between ``K'`` and ``K`` at the manifest's per-band variance of the worst populated voxel, and the bands beyond
-        ``K`` (never stored) at the free bridge's variance at the walk's diffusivity, in closed form to infinity
+        the layout's envelope (its ``band_hz``, at most the ``K`` it stores; never read) at the free bridge's variance at
+        the walk's diffusivity, in closed form to infinity
         (:func:`~dmipy_replay.replay.compression.band_phase_variances`), which bounds every restricted walk's. A waveform
-        whose cost at the full ``K`` exceeds :attr:`truncation_budget` is refused by name; the walk is not read."""
+        whose cost there exceeds :attr:`truncation_budget` is refused by name; the walk is not read."""
+        from .envelope import Envelope
         from .planning import band_tail, fewest
         from .compression import band_phase_variances
-        K = self.K
+        env = Envelope.from_header(self.meta)
+        K = min(self.K, env.mode_count(self.T_window))
         G = np.asarray(seq.G_eff, np.float64)
         D = self.meta["walk_params"].get("diffusivity")
         if D is None:
             raise ValueError("the layout records no diffusivity, so the truncation beyond its stored bands cannot be bounded")
         pb, total = band_phase_variances(G, float(seq.dt), self.T_window, K, float(D))
-        beyond = 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)                  # the bands never stored, per measurement
+        beyond = 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)                  # the bands never read, per measurement
         budget = self.truncation_budget
         if beyond.max() > budget["budget"]:
-            raise ValueError(f"the waveform's gradient reaches beyond this layout's temporal band: the {K} stored bands "
-                             f"({K / (2.0 * self.T_window):.4g} Hz) leave up to {beyond.max():.2e} of the signal in phase the layout "
-                             f"does not carry, against the {budget['budget']:.2e} it may cost (its cap {budget['cap']:.2e} from "
-                             f"{budget['cap_source']} less {budget['other_terms']:.2e} of other certified terms)")
+            raise ValueError(f"the waveform's gradient reaches beyond this layout's temporal band: the {K} bands of its "
+                             f"envelope {env.name!r} ({K / (2.0 * self.T_window):.4g} Hz) leave up to {beyond.max():.2e} of the "
+                             f"signal in phase the layout does not carry, against the {budget['budget']:.2e} it may cost (its "
+                             f"cap {budget['cap']:.2e} from {budget['cap_source']} less {budget['other_terms']:.2e} of other "
+                             "certified terms)")
         var = np.asarray(self.meta["columnar"].get("band_variance_max") or self.meta["columnar"]["band_variance"], np.float64).T   # (K, 3)
-        tail = (band_tail(G, seq.dt, [(self.T_window, None)], var) + beyond[:, None]).max(axis=0)
-        return fewest(tail, self.band_groups, tol * self.floor)
+        tail = (band_tail(G, seq.dt, [(self.T_window, None)], var[:K]) + beyond[:, None]).max(axis=0)
+        return fewest(tail, [g for g in self.band_groups if g <= K] or [K], tol * self.floor)
 
-    def bands_for_class(self, scanner):
-        """``K'``: the fewest stored band groups holding the storage rule's band for scanner class ``scanner``
-        (:func:`~dmipy_replay.replay.storage.mode_count` over one window) -- what every waveform that class can
-        play needs, whatever the waveform. A class whose band is wider than the layout stores is refused by name."""
-        from .storage import mode_count
-        need = mode_count(self.T_window, scanner)
-        if need > self.K:
-            raise ValueError(f"scanner class {scanner!r} needs {need} bands per {self.T_window * 1e3:.4g} ms window and "
-                             f"this layout stores {self.K}: it was built for a class with a narrower band")
+    def bands_for_envelope(self, envelope):
+        """``K'``: the fewest stored band groups holding the band of ``envelope`` (an
+        :class:`~dmipy_replay.replay.envelope.Envelope`, :func:`~dmipy_replay.replay.envelope.envelope_of` for a scanner
+        class) over one window -- what every waveform inside it needs, whatever the waveform. An envelope whose band is
+        wider than the layout's own is refused by name."""
+        from .envelope import Envelope
+        if not isinstance(envelope, Envelope):
+            raise TypeError(f"bands_for_envelope takes an Envelope (envelope_of(scanner) for a scanner class); got "
+                            f"{type(envelope).__name__}")
+        own = Envelope.from_header(self.meta)
+        need = envelope.mode_count(self.T_window)
+        have = min(self.K, own.mode_count(self.T_window))
+        if need > have:
+            raise ValueError(f"the envelope {envelope.name!r} needs {need} bands per {self.T_window * 1e3:.4g} ms window "
+                             f"({envelope.band_hz:.4g} Hz) and this layout is certified for {have} (its envelope "
+                             f"{own.name!r}, {own.band_hz:.4g} Hz): it was built for a narrower band")
         return int(next(g for g in self.band_groups if g >= need))
 
     def modes_for(self, seq, scanner, tissue, tol=0.25):
@@ -256,7 +295,7 @@ class ColumnarPack:
 
     def plan(self, seq, *, tissue=None, scanner=None, tol=0.25, voxels=None):
         """What a replay of ``seq`` reads: bands, field modes, tiers, rows and bytes -- before any byte moves. A
-        waveform outside the scanner class the layout is certified for is refused first
+        waveform outside the envelope the layout is certified for is refused first
         (:func:`~dmipy_replay.replay.replay.check_acquisition_envelope`)."""
         from .replay import check_acquisition_envelope, field_envelope_of, field_term
         f = field_term(self.susceptibility_field, tissue, scanner, field_envelope_of(self.meta))
@@ -264,12 +303,13 @@ class ColumnarPack:
         K, eK = self.bands_for(seq, tol); M, eM = self.modes_for(seq, scanner, tissue, tol)
         return self._plan(K, eK, M, eM, *self._tiers_of(tissue), voxels)
 
-    def plan_for_class(self, scanner_class, *, tissue=None, scanner=None, voxels=None):
-        """What a replay of ANY waveform scanner class ``scanner_class`` can play reads: the class's bands
-        (:meth:`bands_for_class`), every stored field mode when the tissue and the field make a field term (the
-        gate of a waveform not yet named cannot be projected), the tiers the tissue asks for, rows and bytes."""
+    def plan_for_envelope(self, envelope, *, tissue=None, scanner=None, voxels=None):
+        """What a replay of ANY waveform inside ``envelope`` reads (an :class:`~dmipy_replay.replay.envelope.Envelope`;
+        :func:`~dmipy_replay.replay.envelope.envelope_of` for a scanner class): its bands (:meth:`bands_for_envelope`),
+        every stored field mode when the tissue and the field make a field term (the gate of a waveform not yet named
+        cannot be projected), the tiers the tissue asks for, rows and bytes."""
         from .replay import field_term
-        K = self.bands_for_class(scanner_class)
+        K = self.bands_for_envelope(envelope)
         M = int(self.path_groups[-1]) if field_term(self.susceptibility_field, tissue, scanner).active else 0
         return self._plan(K, None, M, None, *self._tiers_of(tissue), voxels)
 
@@ -347,7 +387,7 @@ class ColumnarPack:
 
     # ---- views
     def view(self, *, K=None, modes=0, voxels=None, pools=None, contact=False, relaxation=True, ranges=None):
-        """A :attr:`pack_class` pack of the rows and bands asked for: ``K`` bands (rounded up to a stored group; the
+        """A :class:`~dmipy_replay.replay.replay.ReplayPack` of the rows and bands asked for: ``K`` bands (rounded up to a stored group; the
         pack's K when None), ``modes`` field modes (0: the field tier left out), the contact tier with ``contact``."""
         ranges = self.rows_of(voxels, pools) if ranges is None else ranges
         K = self.K if K is None else int(K)
@@ -380,7 +420,8 @@ class ColumnarPack:
                 meta["view"] = dict(field="unread")                    # the layout holds C3; this view reads none of it
         if not contact:
             meta["compression"]["channels"].pop("boundary_local_time", None)
-        return self.pack_class(arrays, meta)
+        from .replay import ReplayPack
+        return ReplayPack(arrays, meta)
 
     def row_groups(self, chunk_rows=2_000_000):
         """The index rows in groups of about ``chunk_rows`` rows, cut on (voxel, pool) boundaries: the groups
@@ -447,7 +488,11 @@ class ColumnarPack:
         over each voxel's rows by ``backend`` (:attr:`IMAGE_BACKENDS`). With ``settings`` (a list of ``(tissue,
         scanner)``) every setting's volume comes from the same pass -- the settings differ only in what is applied
         to the rows -- and ``S`` gains a leading axis. ``progress(rows, bytes, seconds)`` is called after every
-        row group."""
+        row group. ``seq`` a :class:`~dmipy_replay.replay.study.Study` is :meth:`image_study`'s. ``backend`` is
+        ``"numpy"`` unless ``"jax"`` (the ``jax`` extra) is stated."""
+        from .study import Study
+        if isinstance(seq, Study):
+            return self.image_study(seq, tol=tol, chunk_rows=chunk_rows, backend=backend, progress=progress)
         sums_of = self.IMAGE_BACKENDS[backend]()
         seqs = list(seq) if isinstance(seq, (list, tuple)) else [seq]
         multi = settings is not None; settings = list(settings) if multi else [(tissue, scanner)]
@@ -480,6 +525,97 @@ class ColumnarPack:
         plan.update(bytes_read=self.src.bytes_read, requests=self.src.requests, seconds=time.time() - t0, rows=rows)
         S = S.reshape((len(settings),) + tuple(self.grid.shape) + (n_meas,))
         return (S if multi else S[0]), floor.reshape(self.grid.shape), plan
+
+    def image_study(self, study, *, tol=0.25, chunk_rows=2_000_000, backend="numpy", progress=None):
+        """``(S, floor, plan)`` for a :class:`~dmipy_replay.replay.study.Study` (dmipy-sim#297): ``S`` is
+        ``(pairs, *grid, n_meas)``, ``floor`` ``(pairs, *grid)`` the split-half floor of each volume (the rows of a
+        voxel in two halves, ``max_m |S_a - S_b| / 2`` on the S0-normalised signal), ``plan`` what was read. One pass
+        over the rows: per row group the primitives of every acquisition once (the bands and the path channel
+        contracted, the exposures and the contact read), on the device; every (tissue, scanner) pair then an
+        elementwise term and two segment sums. ``backend`` is where the sums run: ``"numpy"`` (the default) or ``"jax"``
+        (the ``jax`` extra, in double precision on its default device), where it is stated."""
+        import functools
+        if backend not in ("numpy", "jax"):
+            raise ValueError(f"backend is 'numpy' or 'jax', got {backend!r}")
+        if backend == "jax":
+            from .._extras import need
+            jax = need("jax")
+            jnp = jax.numpy
+            was_x64 = bool(jax.config.read("jax_enable_x64"))
+            jax.config.update("jax_enable_x64", True)
+            put, f64 = jnp.asarray, jnp.float64
+        else:
+            put, f64 = np.asarray, np.float64
+        try:
+            pairs = [study.resolved(k) for k in range(len(study))]
+            plans = [self.plan(a.waveform, tissue=t_, scanner=s_, tol=tol) for a in study.protocol for t_, s_ in pairs]
+            plan = dict(plans[0], K=max(p["K"] for p in plans), modes=max(p["modes"] for p in plans), contact=any(p["contact"] for p in plans),
+                        relaxation=any(p["relaxation"] for p in plans), settings=len(pairs), study=study.to_meta())
+            self.src.bytes_read = self.src.requests = 0; t0 = time.time()
+            n_meas = study.protocol.n_meas; n_vox = int(np.prod(self.grid.shape))
+            num = np.zeros((len(pairs), 2, n_vox, n_meas), complex); den = np.zeros((2, n_vox)); rows = 0
+            ROWS, SEGS = 1 << 16, 256
+
+            def pair_terms(xp, phi, fi, fa, et2, et1, ct, ct1, w, terms):
+                """``Primitives.signals`` per row: `(ew[:, None] * E)`, with every term taken from
+                :meth:`~dmipy_replay.replay.primitives.Primitives.reduction_terms` and none re-derived here."""
+                a_i, a_a, rho_D, rho1_D, invT2, invT1, amp, vox = terms
+                logw = -(et2 @ invT2) - (et1 @ invT1) + rho_D * ct + rho1_D * ct1
+                ph = phi + (a_i * fi + a_a * fa)[:, None]
+                E = xp.exp(1j * ph) * vox[None, :]                        # replay._signal_factor
+                return E * (amp * w * xp.exp(logw))[:, None]
+
+            if backend == "jax":
+                @functools.partial(jax.jit, static_argnums=(10,))
+                def pair_sums(phi, fi, fa, et2, et1, ct, ct1, w, seg2, terms, n_seg2):
+                    """The rows' terms summed over each voxel's rows on the device."""
+                    return jax.ops.segment_sum(pair_terms(jnp, phi, fi, fa, et2, et1, ct, ct1, w, terms), seg2,
+                                               num_segments=n_seg2)
+            else:
+                def pair_sums(phi, fi, fa, et2, et1, ct, ct1, w, seg2, terms, n_seg2):
+                    """The rows' terms summed over each voxel's rows on the host."""
+                    E = pair_terms(np, phi, fi, fa, et2, et1, ct, ct1, w, terms)
+                    out = np.zeros((n_seg2, E.shape[1]), E.dtype)
+                    np.add.at(out, seg2, E)
+                    return out
+            for pk in self.iter_views(chunk_rows=chunk_rows, K=plan["K"], modes=plan["modes"], contact=plan["contact"]):
+                n = pk.n_walkers
+                ijk, _ = self.grid.bin(pk.r0); v = np.ravel_multi_index(ijk.T, self.grid.shape)
+                starts = np.flatnonzero(np.r_[True, v[1:] != v[:-1]]); n_seg = len(starts)
+                seg = np.repeat(np.arange(n_seg), np.diff(np.r_[starts, n])); half = (np.arange(n) - starts[seg]) % 2
+                n_pad = -(-n // ROWS) * ROWS; s_pad = -(-(n_seg + 1) // SEGS) * SEGS
+                seg2 = np.full(n_pad, 2 * n_seg, np.int32); seg2[:n] = 2 * seg + half
+                w_all = None
+                for a, sl in zip(study.protocol, study.protocol.slices):
+                    prim = pk.walker_primitives(a, tol=None); w_all = prim.w
+                    pad = lambda x, shape: (np.zeros((n_pad,) + shape) if x is None else np.concatenate([np.asarray(x, np.float64), np.zeros((n_pad - n,) + shape)]))
+                    n_pools = prim.n_pools or 1
+                    phi = pad(prim.phi, (prim.phi.shape[1],)); fi = pad(prim.field_iso, ()); fa = pad(prim.field_aniso, ())
+                    et2 = pad(prim.exposure_t2, (n_pools,)); et1 = pad(prim.exposure_t1, (n_pools,))
+                    ct = pad(prim.contact, ()); ct1 = pad(prim.contact_t1, ()); w = pad(prim.w, ())
+                    dev = [put(x) for x in (phi, fi, fa, et2, et1, ct, ct1, w)] + [put(seg2)]
+                    for k, (t_, s_) in enumerate(pairs):
+                        rt = prim.reduction_terms(t_, s_)                        # every per-pair term, resolved once
+                        terms = (f64(rt["a_iso"]), f64(rt["a_aniso"]), f64(rt["rho2_over_D"]),
+                                 f64(rt["rho1_over_D"]), put(rt["invT2"]), put(rt["invT1"]),
+                                 f64(rt["amplitude"]), put(np.asarray(rt["voxel"], np.float64)))
+                        sums = np.asarray(pair_sums(*dev, terms, 2 * s_pad))[:2 * n_seg].reshape(n_seg, 2, -1)
+                        np.add.at(num[k, 0, :, sl], v[starts], sums[:, 0]); np.add.at(num[k, 1, :, sl], v[starts], sums[:, 1])
+                wh = np.zeros((2, n)); wh[half, np.arange(n)] = w_all
+                np.add.at(den[0], v[starts], np.add.reduceat(wh[0], starts)); np.add.at(den[1], v[starts], np.add.reduceat(wh[1], starts))
+                rows += n
+                if progress:
+                    progress(rows, self.src.bytes_read, time.time() - t0)
+            S = np.full((len(pairs), n_vox, n_meas), np.nan); floor = np.full((len(pairs), n_vox), np.nan)
+            both = (den > 0).all(0); any_ = den.sum(0) > 0
+            tot = num.sum(1); S[:, any_] = np.abs(tot[:, any_] / den.sum(0)[any_][None, :, None])
+            Sa = np.abs(num[:, 0][:, both] / den[0][both][None, :, None]); Sb = np.abs(num[:, 1][:, both] / den[1][both][None, :, None])
+            floor[:, both] = 0.5 * np.abs(Sa - Sb).max(-1)
+            plan.update(bytes_read=self.src.bytes_read, requests=self.src.requests, seconds=time.time() - t0, rows=rows)
+            return S.reshape((len(pairs),) + tuple(self.grid.shape) + (n_meas,)), floor.reshape((len(pairs),) + tuple(self.grid.shape)), plan
+        finally:
+            if backend == "jax":
+                jax.config.update("jax_enable_x64", was_x64)
 
 
 def open_columnar(uri, *, revision="main", workers=8):

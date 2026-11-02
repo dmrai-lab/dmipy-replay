@@ -1,0 +1,148 @@
+{
+ "entries": {
+  "at/R1": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a7",
+   "sha256": "ba98e6a6e8283bf059fccc93636eb4592337704af5e00599c9c96b2afe40b683",
+   "shape": [
+    2
+   ]
+  },
+  "at/R2": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a8",
+   "sha256": "d3cd0d8480edb3bde153dad1bee859c377eb7014b899f5ccf3fa4a1f6a36d0fc",
+   "shape": [
+    2
+   ]
+  },
+  "compose/bingham": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a6",
+   "sha256": "4b0731ebee0a0a99a778026f6973e58c2b1b232ab74d92f8f01de1232b8f87b4",
+   "shape": [
+    2
+   ]
+  },
+  "compose/watson": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a5",
+   "sha256": "0e77860060d78fccce7c14d67e9c4c4dbc985aaf78996ccb002163a84521019b",
+   "shape": [
+    2
+   ]
+  },
+  "fod": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a4",
+   "sha256": "2979be77741b76a4a384ce942cd016187ed82fa6e111dbb3d365465606d97796",
+   "shape": [
+    2
+   ]
+  },
+  "load/asymmetry": {
+   "kind": "float",
+   "value": "8.04430115767076e-06"
+  },
+  "load/coeffs": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a10",
+   "sha256": "cfd18284356f1e9f3e824e023433d4a3f8c0293b9a715ce33a5950413b1cbb3b",
+   "shape": [
+    2,
+    9139
+   ]
+  },
+  "load/field_lmax": {
+   "kind": "int",
+   "value": 0
+  },
+  "load/floor": {
+   "kind": "float",
+   "value": "0.022360679774997897"
+  },
+  "load/lmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "load/misfit": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a11",
+   "sha256": "c108fb11ba0a0efb8fc43cfed2909f957f954f83de54a8807b852f2b8631b8aa",
+   "shape": [
+    2
+   ]
+  },
+  "load/n_bodies": {
+   "kind": "int",
+   "value": 1
+  },
+  "load/nmax": {
+   "kind": "int",
+   "value": 18
+  },
+  "load/phase_amplitude": {
+   "kind": "float",
+   "value": "7.6580859623644075"
+  },
+  "load/route": {
+   "kind": "str",
+   "value": "closed"
+  },
+  "pose_distribution": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a2",
+   "sha256": "6430120d61755ab4ece6d0ea4f3090193c6c9160edf0f8b359b2a7c62c32d22b",
+   "shape": [
+    2
+   ]
+  },
+  "pose_matrix": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a3",
+   "sha256": "164b583f56885533f079d3fb7fca8f90b0b2808cebc4fb80395ff2afe673e4f7",
+   "shape": [
+    2
+   ]
+  },
+  "retained": {
+   "dtype": "<c16",
+   "kind": "array",
+   "npz": "a9",
+   "sha256": "a5a53f2eebe4d1837130801dabb7a5cc379b9ce81d1bba58a0a5d8fa19227ff9",
+   "shape": [
+    2,
+    25
+   ]
+  },
+  "uniform": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a1",
+   "sha256": "da1dcf2d972c7df408d85b4944c58cd4a08dcf2f39ffd15b5c41020424f81b3a",
+   "shape": [
+    2
+   ]
+  },
+  "watson": {
+   "dtype": "<f8",
+   "kind": "array",
+   "npz": "a0",
+   "sha256": "3b77eeb06a81b5dbae399759da19ecca8e6f695a2a6f266872cff76514ad908a",
+   "shape": [
+    2
+   ]
+  }
+ },
+ "seconds": 1.2228536449983949,
+ "status": "ok"
+}

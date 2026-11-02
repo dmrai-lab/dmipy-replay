@@ -248,7 +248,7 @@ def replay_bloch(trajectory, h, G, dt_wf, rf_events, *,
     T2/T1, surface relaxivity, an optional susceptibility off-resonance field, and an optional MT bound-pool
     blend -- piece by piece, the walk cut at every block end and every RF instant, so the phase accrued before a
     pulse is flipped by it exactly wherever the pulse falls (:func:`_bloch_replay_terms`). The forward-engine
-    counterpart is :func:`dmipy_replay.engine.bloch.simulate_bloch`.
+    counterpart is dmipy-sim's ``engine.bloch.simulate_bloch``.
 
     This is the numpy REFERENCE: a Python loop over measurements and pieces written so each operator is one
     readable line.

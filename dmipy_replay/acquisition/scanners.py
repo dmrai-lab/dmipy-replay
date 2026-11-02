@@ -23,9 +23,9 @@ region and a law that does not is not a magnetic field. :data:`SCANNERS` is
 the replay band-limit certificate's class table (dmipy-replay #143), the same classes that size K per scanner, as a
 view of the catalogue: ``(G_max, slew_max)`` per class.
 
-A walk's resolution is the band's: the block the walk accumulates in and the step the step law resolves read the
-class's certified band (:func:`dmipy_replay.replay.bank.storage_band_hz`), never a save grid, and a field source is read
-at the interval a pilot's read series sets (:func:`dmipy_replay.engine.accumulate.field_read_of_pilot`).
+A walk's resolution is the band's: the block the walk accumulates in and the step the step law resolves read the band
+of the walk's envelope (:func:`dmipy_replay.replay.envelope.envelope_of` applies a class's certified band and the
+storage margin), never a save grid.
 """
 from dataclasses import dataclass
 
@@ -515,7 +515,7 @@ class ScannerLimits:
 
     def pulseq_dict(self):
         """This scanner in Pulseq's ``Opts`` schema (``max_grad`` in mT/m, ``max_slew`` in T/m/s, rasters and
-        dead times in s where the catalogue knows them): what :data:`~dmipy_replay.sequences.pulseq.PULSEQ_SYSTEMS`
+        dead times in s where the catalogue knows them): what dmipy-sim's ``sequences.pulseq.PULSEQ_SYSTEMS``
         holds per preset."""
         out = dict(max_grad=self.G_max * 1e3, max_slew=self.slew_max, grad_unit="mT/m", slew_unit="T/m/s")
         for k, v in (("grad_raster_time", self.grad_raster), ("rf_raster_time", self.rf_raster),

@@ -1,0 +1,42 @@
+{
+ "entries": {
+  "bare_fod": {
+   "kind": "str",
+   "value": "TypeError: axis_density takes a <pkg>.FOD, not a bare coefficient array: the spherical-harmonic convention has to be named or the composition is silently wrong (FOD.from_sh(coeffs, basis=...), FOD.native, FOD.watson)"
+  },
+  "fod_basis": {
+   "kind": "str",
+   "value": "ValueError: unknown basis 'mrtrix2'; known: 'tournier07' (legacy False | True), 'descoteaux07'"
+  },
+  "fod_unnormalised": {
+   "kind": "str",
+   "value": "ValueError: integral 3.545 != 1: not a unit-integral density; pass normalize=True to scale it (a CSD FOD integrates to the apparent fibre density)"
+  },
+  "header": {
+   "kind": "str",
+   "value": "ValueError: bad.rpk: This pack carries `the tensor positions`, which this revision does not read; re-walk the pack with a conformant producer. A pack is never converted."
+  },
+  "orientation_object": {
+   "kind": "str",
+   "value": "TypeError: float() argument must be a string or a real number, not 'object'"
+  },
+  "phantom_bare_orientation": {
+   "kind": "str",
+   "value": "ValueError: orientation names 'x', which is not among the substrates [Inert('x')]"
+  },
+  "pose_backend": {
+   "kind": "str",
+   "value": "ValueError"
+  },
+  "pose_matrix": {
+   "kind": "str",
+   "value": "TypeError: pose= takes a <pkg>.Pose (or None), got ndarray; a rotation matrix R is spelled Pose(R)"
+  },
+  "pose_method": {
+   "kind": "str",
+   "value": "ValueError: method is 'auto', 'closed' (the per-walker Rayleigh expansion) or 'quadrature'"
+  }
+ },
+ "seconds": 0.5625511770049343,
+ "status": "ok"
+}

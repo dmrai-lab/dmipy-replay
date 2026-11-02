@@ -1,5 +1,5 @@
 """The parity battery: every replay route this package serves, written once against a namespace so that the same
-scenario runs on dmipy-sim (``tools/make_fixtures.py`` records its numbers) and on dmipy-replay (``test_parity.py``
+scenario ran on dmipy-sim ``8d7b97f`` (its numbers are ``data/reference.json``, a frozen record) and on dmipy-replay (``test_parity.py``
 compares). A scenario is ``(name, pack, fn)`` with ``fn(ns, pack) -> ndarray``; ``ns`` carries the builders and
 ``Tissue`` of whichever package runs it.
 """
