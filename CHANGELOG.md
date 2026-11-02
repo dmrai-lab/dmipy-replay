@@ -27,12 +27,17 @@ package reads them.
   per-axis `G_max`, the field strengths, the susceptibility scale, the refocusing depth and the surface relaxivity.
   `envelope_of(scanner)` gives a scanner class's envelope. Every replay route refuses a request outside the envelope by
   name, and a pack that states none.
+- **The forms are dmipy-analytic's.** The physical constants (`GAMMA`, `GAMMA_BAR`), the real spherical-harmonic basis, the
+  Watson and Bingham forms and the extended phase graph are [dmipy-analytic](https://github.com/dmrai-lab/dmipy-analytic)'s,
+  and dmipy-replay imports them. The moved names are refused by name with their new spelling (`dmipy_replay.GAMMA` says
+  `from dmipy_analytic.constants import GAMMA`, and the moved names of `constants`, `replay.so3` and `acquisition.epg`
+  each say theirs), and `math.sh_analytical` and `acquisition.epg_state`, which moved whole, are gone.
 - **Refused by name.** A pack written by an older producer (re-walk it: a pack is never converted) and a tier the pack
   does not carry.
 - **Names.** A sequence's b-value and b-tensor are `seq.b()` and `seq.btensor()`; `calc_b` and `calc_btensor` are refused
   by name. The substrate spec's pool is `PoolSpec`, and the source of a columnar layout's bytes is
   `columnar.ColumnSource`; `Pool` and `Source` are refused by name with the new spelling.
-- **Pairs with** dmipy-sim 3.0 (the producer of packs). It depends on no other dmipy package. Python >= 3.10, NumPy >= 2.0;
-  the extras `pose` (SciPy, threadpoolctl), `jax`, `torch` and `all` open the routes that need them, and a route whose
-  extra is missing is refused with its `pip install`.
+- **Pairs with** dmipy-sim 3.0 (the producer of packs). It depends on dmipy-analytic `>=3,<4`, which imports with NumPy
+  alone. Python >= 3.10, NumPy >= 2.0; the extras `pose` (SciPy, threadpoolctl, `dmipy-analytic[special]`), `jax`, `torch`
+  and `all` open the routes that need them, and a route whose extra is missing is refused with its `pip install`.
 - **Licence** Apache-2.0 for the code; each pack states its own terms in its header.
