@@ -27,11 +27,12 @@ def test_importing_a_refused_name_says_its_spelling(module, name, spelling):
 
 @pytest.mark.parametrize("module,name,spelling", REFUSED, ids=IDS)
 def test_the_spelling_a_refusal_names_exists(module, name, spelling):
-    if spelling.isidentifier():
-        assert hasattr(importlib.import_module(module), spelling)
+    method = re.fullmatch(r"seq\.(\w+)\(\)", spelling)
+    if method:
+        assert callable(getattr(dr.ScannerSequence, method.group(1)))
     else:
-        method = re.fullmatch(r"seq\.(\w+)\(\)", spelling).group(1)
-        assert callable(getattr(dr.ScannerSequence, method))
+        new, where = re.fullmatch(r"(\w+) \(from ([\w.]+) import \1\)", spelling).groups()
+        assert hasattr(importlib.import_module(where), new)
 
 
 def test_a_name_that_was_never_defined_is_the_ordinary_attribute_error():

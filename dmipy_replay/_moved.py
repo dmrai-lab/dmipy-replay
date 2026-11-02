@@ -11,8 +11,8 @@ SPELLINGS = {
     "dmipy_replay": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
     "dmipy_replay.acquisition.waveforms": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
 }
-"""``{module: {refused name: its one spelling}}``. A spelling is a method of a sequence (``seq.b()``) or a name of the
-refusing module (``PoolSpec``), which the refusal completes to ``from module import PoolSpec``."""
+"""``{module: {refused name: its one spelling}}``, stated whole: a method of a sequence (``seq.b()``), or a new name with
+the import that brings it (``PoolSpec (from dmipy_replay.spec.substrate import PoolSpec)``)."""
 
 
 def _from_import():
@@ -33,6 +33,5 @@ def refuse(module, name):
     spelling = SPELLINGS.get(module, {}).get(name)
     if spelling is None:
         return AttributeError(f"module {module!r} has no attribute {name!r}")
-    hint = f" (from {module} import {spelling})" if spelling.isidentifier() else ""
-    message = f"{module}.{name} does not exist: use {spelling}{hint}"
+    message = f"{module}.{name} does not exist: use {spelling}"
     return ImportError(message, name=module) if _from_import() else AttributeError(message)
