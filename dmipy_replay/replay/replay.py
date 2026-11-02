@@ -45,7 +45,7 @@ from .compression import c2_bands_K as _cx_bands_K
 from .decoded import PackArrays
 from .planning import PLAN_TOL, ReadPlan, planned
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 from ..acquisition.scanner_sequence import Protocol, ScannerSequence
 

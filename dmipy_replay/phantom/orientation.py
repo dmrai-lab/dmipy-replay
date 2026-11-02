@@ -5,7 +5,7 @@ A pose is a rotation, not an axis. The fields below differ in how much of it the
 which the replay integrates away; :class:`Frames` states the whole rotation; :class:`Fan` states a frame and a
 concentration about each of its first two axes, a population dispersed anisotropically. :class:`Watson` is a
 field of Watson parameters -- a direction and a concentration per voxel -- whose coefficients come from
-:func:`dmipy_replay.math.sh_analytical.watson_sh`, the one exact Watson in the ecosystem; nothing here evaluates a
+:func:`dmipy_analytic.orientation.watson_sh`, the one exact Watson in the ecosystem; nothing here evaluates a
 distribution of its own.
 
 Every field is a **volume**: grid + payload for one population per voxel, or grid + ``(K,)`` + payload with
@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..replay.so3 import n_sh_coeffs, lmax_of
+from dmipy_analytic.harmonics import n_sh_coeffs
+
+from ..replay.so3 import lmax_of
 
 __all__ = ["Peaks", "ODF", "Watson", "Frames", "Fan"]
 
@@ -158,7 +160,7 @@ class ODF(_Field):
 class Watson(ODF):
     """A Watson distribution per voxel: ``mu`` a direction volume (grid + ``(3,)``, or grid + ``(K, 3)``), ``kappa``
     a concentration (a scalar, or a volume matching ``mu`` without its last axis). The coefficients are the exact
-    ones of :func:`dmipy_replay.math.sh_analytical.watson_sh` at order ``lmax``, in the required basis."""
+    ones of :func:`dmipy_analytic.orientation.watson_sh` at order ``lmax``, in the required basis."""
 
     def __init__(self, *, mu, kappa, lmax=8, weights=None):
         from ..replay.fod import FOD

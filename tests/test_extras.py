@@ -16,16 +16,14 @@ def _without_scipy(code):
 
 
 def test_the_modules_import_without_scipy():
-    assert _without_scipy("import dmipy_replay.math.sh_analytical, dmipy_replay.replay.so3, dmipy_replay.replay.fod\n"
+    assert _without_scipy("import dmipy_replay.replay.so3, dmipy_replay.replay.fod\n"
                           "print('ok')") == "ok"
 
 
 def test_a_route_that_needs_scipy_names_the_pose_extra():
     out = _without_scipy("import numpy as np\n"
-                         "from dmipy_replay.math.sh_analytical import watson_sh\n"
                          "from dmipy_replay.replay import so3\n"
-                         "for f in (lambda: watson_sh(np.array([0.0, 0.0, 1.0]), 4.0), lambda: so3.clebsch_gordan(1, 1, 1),\n"
-                         "          lambda: so3.haar_rotations(2)):\n"
+                         "for f in (lambda: so3.clebsch_gordan(1, 1, 1), lambda: so3.haar_rotations(2)):\n"
                          "    try:\n        f()\n    except ImportError as e:\n        print(e)\n")
     lines = out.splitlines()
-    assert len(lines) == 3 and all("pip install 'dmipy-replay[pose]'" in l for l in lines), out
+    assert len(lines) == 2 and all("pip install 'dmipy-replay[pose]'" in l for l in lines), out

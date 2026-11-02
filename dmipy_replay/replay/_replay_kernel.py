@@ -12,7 +12,7 @@ against the piecewise-linear path through the block ends. They read it from here
 """
 import numpy as np
 
-from ..constants import GAMMA
+from dmipy_analytic.constants import GAMMA
 
 
 def _cumulative_at(G, dt_wf, times):

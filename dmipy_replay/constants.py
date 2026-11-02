@@ -1,11 +1,6 @@
-"""Physical constants for dmipy-replay."""
+"""The gradient slew rate dmipy-replay's sequence constructors assume, and the rule that reads the slew knob. The physical
+constants are dmipy-analytic's (:mod:`dmipy_analytic.constants`)."""
 import numpy as np
-
-# Proton gyromagnetic ratio in rad / (s * T)
-# Matches disimpy's value exactly.
-GAMMA = 267.513e6
-# The same ratio per cycle, Hz / T.
-GAMMA_BAR = GAMMA / (2.0 * np.pi)
 
 # Default gradient slew rate (T/m/s) for the physical sequence constructors.
 # dmipy-replay is the forward truth -- a real scanner -- so its sequences are
@@ -31,3 +26,8 @@ def resolve_slew(slew_rate):
             "slew-limited gradient, or np.inf for the idealized instantaneous "
             "(square) limit; got {!r}.".format(slew_rate))
     return slew_rate, (not np.isfinite(slew_rate))
+
+
+def __getattr__(name):
+    from ._moved import refuse
+    raise refuse(__name__, name)

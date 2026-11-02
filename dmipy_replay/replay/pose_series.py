@@ -99,6 +99,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from dmipy_analytic import harmonics
+
 __all__ = ["PoseSeries", "pose_series"]
 
 SERIES_GAP = 0.02
@@ -285,16 +287,16 @@ class PoseSeries:
             Tab = (_cheb_T(pc["N"], tau)[:, :, None] * Tb[sel][:, None, :]).reshape(sel.size, -1)   # (n, (N_a+1)(N_b+1))
             body[put(sel) if on_torch else sel] = cplx(Tab) @ self._coef[p]
         # the lab side: the rows' gradient directions and the background's (with the field's) per row
-        Yg = cplx(so3.real_sh(self._l_lab, g_hat, full=True))
+        Yg = cplx(harmonics.real_sh(self._l_lab, g_hat, full=True))
         u_dirs, u_of = np.unique(u, axis=0, return_inverse=True)                  # a class's rows share its magnet's gradient
         u_of = np.asarray(u_of).reshape(-1)
         u_of = put(u_of) if on_torch else u_of
-        lam = [cplx(x)[u_of] for x in _factor_lab(self._channels, so3.real_sh(self.background_lmax, u_dirs, full=True),
+        lam = [cplx(x)[u_of] for x in _factor_lab(self._channels, harmonics.real_sh(self.background_lmax, u_dirs, full=True),
                                                    self._Yb, self._K_fb)]
         coeffs = (self._torch.zeros((rows, self._n_feat), dtype=cdt, device=self._dev) if on_torch
                   else np.zeros((rows, self._n_feat), np.complex128))
         for (l, Lam), (cis, cols, K_lab, Ls, lab_sl, body_sl, gains) in self._groups.items():
-            bl = so3.sh_block(l, True)
+            bl = harmonics.sh_block(l, True)
             Rl = (Yg[:, bl] @ K_lab).reshape(rows, 2 * Lam + 1, -1)           # (rows, 2Lam+1, sum 2Lc+1)
             lam_c = xp.stack([lam[ci] for ci in cis], 1)                      # (rows, n_ci, 2Lam+1)
             body_c = body[:, cols].reshape(rows, len(cis), -1)                # (rows, n_ci, sum 2kk+1)
@@ -329,7 +331,7 @@ def _window_maps(pack, P, n_t_wf, dt_wf):
     window the acquisition reaches side by side -- ``gamma`` times the bands' projection of each held sample
     (:func:`~dmipy_replay.replay.compression.band_projection_matrix`), the map every closed-form route reads."""
     from dmipy_replay.replay.compression import band_projection_matrix
-    from .replay import GAMMA
+    from dmipy_analytic.constants import GAMMA
     return np.concatenate([GAMMA * band_projection_matrix(n_t_wf, dt_wf, T_s, pack.K, t0=t0)
                            for _seg, t0, T_s in P["windows"]], 0)
 
@@ -696,7 +698,7 @@ def pose_series(pack, waveforms, *, tissue=None, scanner=None, pose=None, compar
         Yb = None
         if F_sh is not None:
             b_lab = np.asarray(P0["b0_dir"], np.float64); b_lab = b_lab / np.linalg.norm(b_lab)
-            Yb = so3.real_sh(L_f, b_lab[None, :], full=True)[0]
+            Yb = harmonics.real_sh(L_f, b_lab[None, :], full=True)[0]
         # the coupled body layout: per (l, channel) its sum 2kk+1 columns
         cpl, n_cpl = {}, 0
         for l in l_used:
@@ -720,12 +722,12 @@ def pose_series(pack, waveforms, *, tissue=None, scanner=None, pose=None, compar
         b_nodes = beta_max / 2.0 * (1.0 + _cheb_points(N_b)) if beta_max > 0 else np.zeros(1)
         if kind == "torch":
             new = lambda shape: torch.empty(shape, dtype=torch.complex128, device=t_dev)
-            Y_n = put(so3.real_sh(L_b, n_hat, full=True)); F_sh_k = None if F_sh is None else put(F_sh)
+            Y_n = put(harmonics.real_sh(L_b, n_hat, full=True)); F_sh_k = None if F_sh is None else put(F_sh)
             K_fb_k = {pr: {Lm: put(K.conj()) for Lm, K in Kp.items()} for pr, Kp in K_fb.items()}
             K_body = {key: put(t[2]) for key, t in tables.items()}
         else:
             new = lambda shape: np.empty(shape, np.complex128)
-            Y_n = so3.real_sh(L_b, n_hat, full=True); F_sh_k = F_sh
+            Y_n = harmonics.real_sh(L_b, n_hat, full=True); F_sh_k = F_sh
             K_fb_k = {pr: {Lm: K.conj() for Lm, K in Kp.items()} for pr, Kp in K_fb.items()}
             K_body = {key: t[2] for key, t in tables.items()}
         values = np.empty((n_nodes, len(b_nodes), n_cpl), np.complex128)

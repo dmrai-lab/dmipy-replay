@@ -10,6 +10,8 @@ import functools
 
 import numpy as np
 
+from dmipy_analytic import harmonics
+
 from .compression import resolve_device
 
 
@@ -156,7 +158,7 @@ def pose_samples(R, Q, ew, norm, *, field=None, device="numpy", chunk_bytes=1 <<
 
 @functools.lru_cache(maxsize=16)
 def _real_sh_kernel(L):
-    """``dirs (n, 3) -> (n, (L+1)^2)`` float32: :func:`so3.real_sh` (full layout) as one jitted pass of the same
+    """``dirs (n, 3) -> (n, (L+1)^2)`` float32: :func:`dmipy_analytic.harmonics.real_sh` (full layout) as one jitted pass of the same
     three-term recurrences on the fully normalised associated Legendre functions."""
     import jax
     import jax.numpy as jnp
@@ -194,11 +196,11 @@ def _real_sh_kernel(L):
 
 def real_sh(L, dirs, *, device="numpy", chunk_bytes=1 << 30):
     """Orthonormal real spherical harmonics ``(n, (L+1)^2)`` of unit directions ``dirs`` ``(n, 3)`` in the full layout of
-    :func:`so3.real_sh`: on the device in chunks of directions, float64 on the host; numpy's when there is none."""
+    :func:`dmipy_analytic.harmonics.real_sh`: on the device in chunks of directions, float64 on the host; numpy's when there is none."""
     from . import so3
     dirs = np.asarray(dirs, np.float64).reshape(-1, 3)
     if resolve_device(device) == "numpy":
-        return so3.real_sh(int(L), dirs, full=True)
+        return harmonics.real_sh(int(L), dirs, full=True)
     import jax.numpy as jnp
     kernel = _real_sh_kernel(int(L))
     n_cols = (int(L) + 1) ** 2
@@ -302,7 +304,7 @@ def host_bodies(kappa, m_hat, w, L, l_used, keep_n=None, J=None):
     kappa = np.asarray(kappa, np.float64); m_hat = np.asarray(m_hat, np.float64); w = np.asarray(w, np.float64)
     n_w, nc = kappa.shape
     L = int(L)
-    Y = so3.real_sh(L, m_hat.reshape(-1, 3), full=True).reshape(n_w, nc, (L + 1) ** 2)
+    Y = harmonics.real_sh(L, m_hat.reshape(-1, 3), full=True).reshape(n_w, nc, (L + 1) ** 2)
     J = so3.spherical_jn_all(max(l_used), kappa) if J is None else np.asarray(J)
     out = {}
     for l in l_used:
@@ -489,7 +491,7 @@ def _sh_columns(L):
 
 
 def real_sh_torch(L, dirs):
-    """:func:`so3.real_sh` (full layout) of unit directions ``dirs`` ``(n, 3)``, a torch tensor in its own dtype and
+    """:func:`dmipy_analytic.harmonics.real_sh` (full layout) of unit directions ``dirs`` ``(n, 3)``, a torch tensor in its own dtype and
     device: the same recurrences on the fully normalised associated Legendre functions, each order's step taken for
     every ``m`` at once (``(n, L+1)`` per order) so the recurrence is ``L`` steps of a few kernels each, then every
     column gathered from them and its azimuthal factor in one pass."""

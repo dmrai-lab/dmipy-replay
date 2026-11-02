@@ -13,6 +13,8 @@ route needs it, and the CPU thread cap (:func:`dmipy_replay.cap_cpu_threads`) is
 """
 import numpy as np
 
+from dmipy_analytic import harmonics
+
 from . import so3 as _r_so3
 from .phases import Phases, current
 from .replay import _compile_continuous, _path_field_channels
@@ -476,7 +478,7 @@ def _pose_coeffs_closed_many(pack, Ps, waveforms, keep=None, tol=1e-8, l_cap=64,
         # ---- gradient x field: the outer product of the two body expansions per walker, summed over the
         # walkers per group, then coupled on both indices into the total order L_tot
         b_lab = np.asarray(P0["b0_dir"], np.float64); b_lab = b_lab / np.linalg.norm(b_lab)
-        Yb = so3.real_sh(L_f, b_lab[None, :], full=True)[0]                 # ((L_f+1)^2,): the field direction, lab side
+        Yb = harmonics.real_sh(L_f, b_lab[None, :], full=True)[0]                 # ((L_f+1)^2,): the field direction, lab side
         # the field factor as two contiguous real blocks, for field_bodies' host route (BLAS does not take a
         # .real view's 16-byte stride) and for the float32 copies its device route makes
         F_re, F_im = np.ascontiguousarray(F_sh.real), np.ascontiguousarray(F_sh.imag)
@@ -541,7 +543,7 @@ def _pose_coeffs_closed_many(pack, Ps, waveforms, keep=None, tol=1e-8, l_cap=64,
             for lp in range(L_f + 1):
                 if (l, lp) not in tables:
                     continue
-                blp = so3.sh_block(lp, True)
+                blp = harmonics.sh_block(lp, True)
                 B = B_all[:, :, blp].reshape(n_grp, -1)                                 # (n_grp, (2l+1)(2l'+1))
                 bodies_c[(l, lp)] = B @ tables[(l, lp)][2]
     # what the expansion cannot hold pointwise: the orders above the band it was built to, as a bound from
@@ -554,25 +556,25 @@ def _pose_coeffs_closed_many(pack, Ps, waveforms, keep=None, tol=1e-8, l_cap=64,
     for c in live:
         q = per[c]; n_meas = q["n_meas"]; group = q["group"] + g_off[c]     # the measurements' groups on the axis
         g_sl = slice(g_off[c], g_off[c] + len(q["first"]))
-        Yg = so3.real_sh(L, q["g_hat"], full=True)                             # (n_meas, (L+1)^2): the lab side
+        Yg = harmonics.real_sh(L, q["g_hat"], full=True)                             # (n_meas, (L+1)^2): the lab side
         coeffs = np.zeros((n_meas, n_feat), np.complex128)
         if field is None:
             off = 0
             for l in range(keep_l + 1):
                 k = so3._n_cols(l, keep_n) // 2
-                blk = so3.sh_block(l, True)
+                blk = harmonics.sh_block(l, True)
                 body_i = bodies[l][group]                                                      # (n_meas, 2k+1)
                 block = (4 * np.pi * (1j ** l) / np.sqrt(2 * l + 1)) * Yg[:, blk][:, :, None] * body_i[:, None, :]
                 coeffs[:, off:off + (2 * l + 1) * (2 * k + 1)] = block.reshape(n_meas, -1)
                 off += (2 * l + 1) * (2 * k + 1)
         else:
             for l in l_used:
-                bl = so3.sh_block(l, True)
+                bl = harmonics.sh_block(l, True)
                 for lp in range(L_f + 1):
                     if (l, lp) not in tables:
                         continue
                     Ls, K_lab, _K_body, lab_sl, body_sl = tables[(l, lp)]
-                    blp = so3.sh_block(lp, True)
+                    blp = harmonics.sh_block(lp, True)
                     # lab: Lam[i, (m, n')] = Y_lm(g^_i) Y_l'n'(b^), against every coupled order at once
                     Lam = (Yg[:, bl][:, :, None] * Yb[blp][None, None, :]).reshape(n_meas, -1)
                     lab_all = Lam @ K_lab                                       # (n_meas, sum 2Lc+1)
@@ -679,9 +681,9 @@ def _closed_with_background(pack, per, live, g_off, n_grp, kappa, m_hat, w, n_bg
     channels, n_cols, K_fb = _factor_channels(None if F_sh is None else L_f, L_b)
     if F_sh is not None:
         b_lab = np.asarray(b0_dir, np.float64); b_lab = b_lab / np.linalg.norm(b_lab)
-        Yb = so3.real_sh(L_f, b_lab[None, :], full=True)[0]
+        Yb = harmonics.real_sh(L_f, b_lab[None, :], full=True)[0]
     Lam_max = L_f + L_b
-    Y_n = [put(so3.real_sh(L_b, n_hat[:, j, :], full=True)) for j in range(n_hat.shape[1])]
+    Y_n = [put(harmonics.real_sh(L_b, n_hat[:, j, :], full=True)) for j in range(n_hat.shape[1])]
     F_sh_k = None if F_sh is None else put(F_sh)
     K_fb_k = {} if F_sh is None else {pair: {Lam: put(K.conj()) for Lam, K in Kp.items()} for pair, Kp in K_fb.items()}
 
@@ -719,13 +721,13 @@ def _closed_with_background(pack, per, live, g_off, n_grp, kappa, m_hat, w, n_bg
     for c in live:
         q = per[c]; n_meas = q["n_meas"]; group = q["group"] + g_off[c]
         g_sl = slice(g_off[c], g_off[c] + len(q["first"]))
-        Yg = so3.real_sh(L, q["g_hat"], full=True)                        # (n_meas, (L+1)^2): the gradient's lab side
+        Yg = harmonics.real_sh(L, q["g_hat"], full=True)                        # (n_meas, (L+1)^2): the gradient's lab side
         g0 = q["g0"]
         beta = np.linalg.norm(g0, axis=1)
         u_dirs, inv = np.unique(np.where(beta[:, None] > 0, g0 / np.where(beta > 0, beta, 1.0)[:, None], (0.0, 0.0, 1.0)),
                                 axis=0, return_inverse=True)
         inv = np.asarray(inv).reshape(-1)
-        lam = _factor_lab(channels, so3.real_sh(L_b, u_dirs, full=True), Yb, K_fb)   # per channel: (n_u, 2 Lambda + 1)
+        lam = _factor_lab(channels, harmonics.real_sh(L_b, u_dirs, full=True), Yb, K_fb)   # per channel: (n_u, 2 Lambda + 1)
         coeffs = np.zeros((n_meas, n_feat), np.complex128)
         M_lab = {}                                                        # (l, channel) -> (n_u, 2l+1, sum 2Lc+1)
         for k in np.unique(bucket[g_sl]):
@@ -746,7 +748,7 @@ def _closed_with_background(pack, per, live, g_off, n_grp, kappa, m_hat, w, n_bg
                 sel = np.flatnonzero(where[group] >= 0)                    # the measurements whose bodies these are
                 pos = where[group[sel]]
                 for l in l_used:
-                    bl = so3.sh_block(l, True)
+                    bl = harmonics.sh_block(l, True)
                     B_l = None if coupled is not None else B3[:, l_off[l]:l_off[l] + 2 * l + 1, :]
                     Yg_l = Yg[sel][:, bl]                                              # (n_sel, 2l+1)
                     for ci, (Lam, cols, _ch) in enumerate(channels):
@@ -888,12 +890,12 @@ def _background_bodies(pack, grp, s_first, kappa, m_hat, w, F_re, F_im, L, l_use
                                                  n_bessel, step, t_dev)
         return
     for members, g_ref, x, K, c, dev in series:
-        Y = so3.real_sh(L, m_hat[:, grp[g_ref], :], full=True)             # (n_w, (L+1)^2): the shell's vector directions
+        Y = harmonics.real_sh(L, m_hat[:, grp[g_ref], :], full=True)             # (n_w, (L+1)^2): the shell's vector directions
         M = np.empty((K + 1, R, F_re.shape[1]), np.complex128)
         for k in range(K + 1):
             X = np.empty((n_w, R))
             for l in l_used:
-                X[:, l_off[l]:l_off[l] + 2 * l + 1] = (w * c[l][k] * x ** (l + 2 * k))[:, None] * Y[:, so3.sh_block(l, True)]
+                X[:, l_off[l]:l_off[l] + 2 * l + 1] = (w * c[l][k] * x ** (l + 2 * k))[:, None] * Y[:, harmonics.sh_block(l, True)]
             M[k] = paired_products(X, row_n, F_re, F_im, col_n, keep_n) if paired else (X.T @ F_re) + 1j * (X.T @ F_im)
         t = amp[members] / amp[g_ref]                                      # (n_m,): each row's amplitude in the shell's
         l_row = np.concatenate([np.full(2 * l + 1, l) for l in l_used])
@@ -1081,9 +1083,9 @@ def _field_harmonics_of(pack, a, A, tol=1e-8, l_cap=64, device="numpy"):
     from .pose_device import field_factor
     while True:
         dirs, wq = so3.sphere_quadrature(Lp + 2, 2 * Lp + 2)
-        Y = so3.real_sh(Lp, dirs, full=True)                               # (n_q, (Lp+1)^2)
+        Y = harmonics.real_sh(Lp, dirs, full=True)                               # (n_q, (Lp+1)^2)
         F = field_factor(a, A, dirs, Y * wq[:, None], device=device)       # (n_w, (Lp+1)^2), on the device it can use
-        top = so3.sh_block(Lp, True)
+        top = harmonics.sh_block(Lp, True)
         if (np.abs(F[:, top]) ** 2).sum(1).max() <= tol * 4.0 * np.pi or Lp + 4 > l_cap:
             return F, Lp
         Lp += 4
@@ -1240,14 +1242,14 @@ def analytic_pose_response(form, waveform, keep=None, *, over=8, tol=1e-8, l_cap
         L = int(lmax) + int(ov)
         dirs, w = so3.sphere_quadrature(L + 1, 2 * L + 2)
         E = np.stack([_evaluate(form, waveform, _r_so3.rotation_of(u), evaluated) for u in dirs])   # (n_q, n_meas)
-        Y = so3.real_sh(int(lmax), dirs, full=True)
+        Y = harmonics.real_sh(int(lmax), dirs, full=True)
         return (Y * w[:, None]).T @ E
 
     if keep_l is None:
         ladder = [l for l in (4, 8, 12, 16, 24, 32, 48) if l <= l_cap] or [int(l_cap)]
         for lmax in ladder:
             g = sh(lmax, over)
-            per_l = np.array([float((np.abs(g[so3.sh_block(l, True)]) ** 2).sum()) for l in range(lmax + 1)])
+            per_l = np.array([float((np.abs(g[harmonics.sh_block(l, True)]) ** 2).sum()) for l in range(lmax + 1)])
             tot = float(per_l.sum())
             if tot > 0 and per_l[-2:].sum() <= tol * tot:
                 break
@@ -1316,7 +1318,7 @@ def _factor_channels(L_f, L_b):
     background's ``l2`` couple into (kind ``("fb", l', l2)``, ``K_fb[(l', l2)]`` the real coupling tables)."""
     from . import so3
     if L_f is None:
-        return [(l2, so3.sh_block(l2, True), ("b", l2)) for l2 in range(L_b + 1)], (L_b + 1) ** 2, {}
+        return [(l2, harmonics.sh_block(l2, True), ("b", l2)) for l2 in range(L_b + 1)], (L_b + 1) ** 2, {}
     channels, n_cols, K_fb = [], 0, {}
     for lp in range(L_f + 1):
         for l2 in range(L_b + 1):
@@ -1337,13 +1339,13 @@ def _factor_of(J, Y_n, F_sh, K_fb_conj, channels, L_b, n_cols, new):
     n_w = J.shape[1]
     Fb = new((n_w, (L_b + 1) ** 2))
     for l2 in range(L_b + 1):
-        b2 = so3.sh_block(l2, True)
+        b2 = harmonics.sh_block(l2, True)
         Fb[:, b2] = (4 * np.pi * (1j ** l2)) * J[l2][:, None] * Y_n[:, b2]
     if F_sh is None:
         return Fb
     F = new((n_w, n_cols))
     for (lp, l2), Kc in K_fb_conj.items():
-        prod = (F_sh[:, so3.sh_block(lp, True)][:, :, None] * Fb[:, so3.sh_block(l2, True)][:, None, :]).reshape(n_w, -1)
+        prod = (F_sh[:, harmonics.sh_block(lp, True)][:, :, None] * Fb[:, harmonics.sh_block(l2, True)][:, None, :]).reshape(n_w, -1)
         for Lam, cols, ch in channels:
             if ch[1:] == (lp, l2):
                 F[:, cols] = prod @ Kc[Lam]
@@ -1358,10 +1360,10 @@ def _factor_lab(channels, Y_u, Yb, K_fb):
     lam = []
     for Lam, _cols, ch in channels:
         if ch[0] == "b":
-            lam.append(Y_u[:, so3.sh_block(ch[1], True)])
+            lam.append(Y_u[:, harmonics.sh_block(ch[1], True)])
         else:
             _, lp, l2 = ch
-            pair = (Yb[so3.sh_block(lp, True)][None, :, None] * Y_u[:, None, so3.sh_block(l2, True)]).reshape(Y_u.shape[0], -1)
+            pair = (Yb[harmonics.sh_block(lp, True)][None, :, None] * Y_u[:, None, harmonics.sh_block(l2, True)]).reshape(Y_u.shape[0], -1)
             lam.append(pair @ K_fb[(lp, l2)][Lam])
     return lam
 

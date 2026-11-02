@@ -21,10 +21,12 @@ from pathlib import Path
 
 import numpy as np
 
+from dmipy_analytic import harmonics
+
 from dmipy_replay.phantom.grid import Grid
-from dmipy_replay.constants import GAMMA, GAMMA_BAR
+from dmipy_analytic.constants import GAMMA, GAMMA_BAR
 from ..phantom.substrates import substrate_from_meta, _echo_time
-from .so3 import n_sh_coeffs, lmax_of
+from .so3 import lmax_of
 from .phases import Phases, current
 
 log = logging.getLogger(__name__)
@@ -552,16 +554,16 @@ class ReplayPhantom:
             if mode == "peaks":
                 d = self.peak_dir[idx[:, 0], idx[:, 1]].astype(np.float64)
                 d = d / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-30)
-                sh = so3.real_sh(lmax, d, full=True)
+                sh = harmonics.real_sh(lmax, d, full=True)
             else:
                 from .fod import _C00
                 c = self.odf_sh[idx[:, 0], idx[:, 1]].astype(np.float64)            # (n_posed, n_c), compact even
                 if np.any(np.abs(c[:, 0] - _C00) > 1e-6 * _C00):
                     raise ValueError("an ODF slot is not a unit-integral density in the required basis")
                 l_odf = lmax_of(c.shape[1])
-                sh = np.zeros((c.shape[0], so3.n_sh_coeffs(int(lmax), full=True)))
+                sh = np.zeros((c.shape[0], harmonics.n_sh_coeffs(int(lmax), full=True)))
                 for l in range(0, min(l_odf, int(lmax)) + 1, 2):                    # compact even -> full layout
-                    sh[:, so3.sh_block(l, True)] = c[:, so3.sh_block(l, False)]
+                    sh[:, harmonics.sh_block(l, True)] = c[:, harmonics.sh_block(l, False)]
             F[posed] = sh @ T.T
         elif mode in ("frames", "bingham"):
             R = so3.rotations_from_quaternions(self.pose_quat[idx[:, 0], idx[:, 1]])

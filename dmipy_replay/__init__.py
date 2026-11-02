@@ -13,7 +13,6 @@ walk and no GPU::
 Every acquisition is a :class:`ScannerSequence` (replay-pack-spec ACQUISITION.md): build one with the builders, or read
 a Pulseq ``.seq`` with :func:`from_pulseq`.
 """
-from .constants import GAMMA
 from .acquisition.scanner_sequence import ScannerSequence, Encoding, Protocol, Prescription
 from .acquisition.rf import B1Pulse, RFEvent, RFSchedule
 from .acquisition.timing import SequenceTiming
@@ -48,7 +47,7 @@ def __getattr__(name):
 
 __version__ = "0.1.0"
 
-__all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
+__all__ = ["ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
