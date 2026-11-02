@@ -10,6 +10,8 @@ import sys
 SPELLINGS = {
     "dmipy_replay": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
     "dmipy_replay.acquisition.waveforms": {"calc_b": "seq.b()", "calc_btensor": "seq.btensor()"},
+    "dmipy_replay.spec.substrate": {"Pool": "PoolSpec"},
+    "dmipy_replay.replay.columnar": {"Source": "ColumnSource"},
 }
 """``{module: {refused name: its one spelling}}``. A spelling is a method of a sequence (``seq.b()``) or a name of the
 refusing module (``PoolSpec``), which the refusal completes to ``from module import PoolSpec``."""
