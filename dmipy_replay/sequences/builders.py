@@ -330,7 +330,7 @@ def splice(gradient_directions, delta, Delta, n_echoes, TE_echo, *, bvalues=None
     behaviour at a reduced flip IS that dependence. It is declared here as ``crusher`` on the sequence, in
     windows of ``crusher_width`` (default half a train interval) either side of every refocusing pulse,
     winding ``crusher_cycles`` turns; :meth:`~dmipy_replay.replay.ReplayPack.replay_bloch` and
-    :func:`~dmipy_replay.simulate_bloch` both read it. The window is balanced about its pulse so the pulse
+    dmipy-sim's ``engine.bloch.simulate_bloch`` both read it. The window is balanced about its pulse so the pulse
     rewinds what the window wound, which is what preserves the refocused pathway while spoiling the ones that
     were stored for part of it.
 

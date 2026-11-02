@@ -515,7 +515,7 @@ class ScannerLimits:
 
     def pulseq_dict(self):
         """This scanner in Pulseq's ``Opts`` schema (``max_grad`` in mT/m, ``max_slew`` in T/m/s, rasters and
-        dead times in s where the catalogue knows them): what :data:`~dmipy_replay.sequences.pulseq.PULSEQ_SYSTEMS`
+        dead times in s where the catalogue knows them): what dmipy-sim's ``sequences.pulseq.PULSEQ_SYSTEMS``
         holds per preset."""
         out = dict(max_grad=self.G_max * 1e3, max_slew=self.slew_max, grad_unit="mT/m", slew_unit="T/m/s")
         for k, v in (("grad_raster_time", self.grad_raster), ("rf_raster_time", self.rf_raster),

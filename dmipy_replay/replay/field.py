@@ -109,7 +109,7 @@ def susc_path_coeffs(arrays, meta, modes=None):
     """Dequantised C3 coefficients in the canonical channel order -- ``(n_w, n_ch_full, K)``, twelve channels
     (``iso_local``, five ``iso_P``, six ``aniso_G``) or the six isotropic ones: a component the pack leaves out
     (``zero_components``, an absent ``aniso_G`` block) is zero. ``iso_P_zz`` is not a channel here: the contraction
-    forms it from the trace (:func:`~dmipy_replay.fields.hollow_cylinder.field_terms`), and a descriptor that lists it is
+    forms it from the trace (dmipy-sim's ``fields.hollow_cylinder.field_terms``), and a descriptor that lists it is
     refused.
 
     The ONE place that undoes the storage container. ``susc_path_dct`` may be an integer array whose
@@ -199,7 +199,7 @@ def _susc_path_coeffs(arrays, meta, lo=0, hi=None):
 
 def susc_path_field(b, b0_dir, *, B0, chi_iso, chi_aniso=0.0, has_aniso=False):
     """``dB(t)`` per walker ``(n_w, n_t)`` from the decoded path channels ``(n_w, n_ch, n_t)`` for one
-    ``(B0, direction, chi)``: :func:`~dmipy_sim.fields.hollow_cylinder.contract` along the channel axis."""
+    ``(B0, direction, chi)``: dmipy-sim's ``fields.hollow_cylinder.contract`` along the channel axis."""
     aniso = chi_aniso if (has_aniso and chi_aniso and b.shape[1] >= 12) else 0.0
     return contract(b, b0_dir, B0=B0, chi_iso=chi_iso, chi_aniso=aniso, axis=1)
 
@@ -248,7 +248,7 @@ def path_field_integral(arrays, meta, waveform, T, *, t0=None, n_w=None, modes=N
     """The gated path integral of every field channel per walker, ``(Psi (n_w, n_ch), names)``: ``Psi = gamma int
     gate(t) b(t) dt = gamma sum_k g_k c_k`` with ``g_k`` the gate's cosine projection on the window ``[t0, t0 + T]``
     (:func:`~dmipy_replay.replay.compression.cosine_projection`; Parseval, RPK.md 9.5.4) and ``c_k`` the stored modes.
-    The names are in the canonical order, what :func:`~dmipy_replay.fields.hollow_cylinder.field_terms` reads. ``modes``
+    The names are in the canonical order, what dmipy-sim's ``fields.hollow_cylinder.field_terms`` reads. ``modes``
     sums the lowest ``modes`` field modes only (the plan's, :meth:`~dmipy_replay.replay.replay.ReplayPack.plan`)."""
     from ..constants import GAMMA
     Cs, names = susc_path_coeffs(arrays, meta, modes)

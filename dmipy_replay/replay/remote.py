@@ -63,10 +63,7 @@ class RemotePack:
     branch, tag or commit; ``main`` by default), resolved to its commit sha once when the pack opens, so every range
     read comes from that one commit. ``url=`` replaces the Hub's URL (how a test drives it past a plain HTTP server, as
     :func:`~dmipy_replay.replay.hub.fetch_windows` is). ``meta`` is the pack's header; :attr:`bytes_fetched` the bytes
-    read so far, the header's included. The packs it builds are :attr:`pack_class`."""
-
-    #: the class of the packs a load or a view builds
-    pack_class = ReplayPack
+    read so far, the header's included. The packs it builds are :class:`~dmipy_replay.replay.replay.ReplayPack`."""
 
     def __init__(self, uri, *, url=None, revision=None):
         self.uri = uri
@@ -113,12 +110,12 @@ class RemotePack:
         return sum(int(d["data_offsets"][1] - d["data_offsets"][0]) for d in self._table.values())
 
     def load(self):
-        """The whole file as a :attr:`pack_class` pack, downloaded at this pack's revision and checked against the
+        """The whole file as a :class:`~dmipy_replay.replay.replay.ReplayPack`, downloaded at this pack's revision and checked against the
         dataset's manifest at that commit (:func:`~dmipy_replay.replay.hub.fetch`): the one call that moves the whole
         pack."""
         from .hub import fetch
         from .replay import read_rpk
-        return read_rpk(fetch(self.uri, revision=self.revision), cls=self.pack_class)
+        return read_rpk(fetch(self.uri, revision=self.revision))
 
     # ---- the plan
     def plan(self, waveform, *, tissue=None, scanner=None, orientation=None, tol=PLAN_TOL, K=None, modes=None):
@@ -228,7 +225,7 @@ class RemotePack:
             meta["view"] = dict(field="unread")
         if not contact:
             cx["channels"].pop("boundary_local_time", None)
-        pack = self.pack_class(arrays, meta, source=self.uri)
+        pack = ReplayPack(arrays, meta, source=self.uri)
         self._views[key] = pack
         return pack
 

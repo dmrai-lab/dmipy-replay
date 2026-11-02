@@ -1,4 +1,4 @@
-"""The time-segment layout read here against dmipy-sim's own reads of the same layout (``tools/make_segment_fixtures.py``):
+"""The time-segment layout read here against dmipy-sim's own reads of the same layout (``data/segment_reference.json``, recorded at dmipy-sim ``8d7b97f`` and frozen):
 the words and the tiers are the same code and the same bits, the fits the same to the least-squares solver's rounding; the image is the same float32 arithmetic on
 numpy that sim's kernel runs on JAX, equal to the float32 rounding of the phases."""
 import json

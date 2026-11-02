@@ -13,7 +13,7 @@ The forward is exact and cheap. The signal is
     E = < w_i exp(i phi_i) > / < w_i > ,   phi_i(m) = gamma * dt * sum_t G_m(t) . r_i(t)
 
 and because the phase is linear in position it is a contraction of the stored coefficients ``C_i`` (the two
-endpoints and the ``K`` bands the walk accumulated, :mod:`dmipy_replay.engine.accumulate`) with the waveform's
+endpoints and the ``K`` bands the walk accumulated, dmipy-sim's ``engine.accumulate``) with the waveform's
 projection on the same basis,
 
     phi_i(m) = sum_{k,c} C_{i,k,c} * W_{m,k,c},
@@ -52,15 +52,15 @@ from ..acquisition.scanner_sequence import Protocol, ScannerSequence
 __all__ = ["ReplayPack", "read_rpk", "compile_scheme", "replay_signal", "replay_coefficients", "surface_logweight"]
 
 
-def read_rpk(path, *, cls=None):
+def read_rpk(path):
     """Read a replay pack into a :class:`ReplayPack` (arrays + metadata). A pack that embeds no substrate spec, or
     whose spec's pools, tiers and stored field channel disagree (:func:`declared_susceptibility_field`), is
-    refused. ``cls`` is the class built, a subclass of :class:`ReplayPack` (the producer's, which adds its routes)."""
+    refused."""
     from .container import read_safetensors
     arrays, hdr = read_safetensors(path)
     meta = json.loads(hdr.get("rpk") or hdr.get("json") or "{}")
     _refuse_predating(meta, path, tensors=arrays)
-    pack = (cls or ReplayPack)(arrays, meta, source=str(path))
+    pack = ReplayPack(arrays, meta, source=str(path))
     pack.susceptibility_field
     return pack
 
@@ -376,7 +376,7 @@ class ReplayPack:
     def decode_budget(self):
         """Bytes of decoded arrays this pack may hold, settable: :data:`~dmipy_replay.replay.decoded.DECODE_BUDGET_BYTES`
         (1 GiB) unless set. The readers (:func:`~dmipy_replay.replay.compression.read_position_coeffs`,
-        :func:`~dmipy_replay.replay.bank.susc_path_coeffs`, :func:`~dmipy_replay.replay.compression.bridge_bands`,
+        dmipy-sim's ``replay.bank.susc_path_coeffs``, :func:`~dmipy_replay.replay.compression.bridge_bands`,
         :func:`~dmipy_replay.replay.compression.occupancy_events`) decode each selection of the pack's stored tensors once
         and every later call of :meth:`replay`, :meth:`walker_signals`, :meth:`walker_phases` and the rest reads the
         held read-only array; an array that does not fit beside what is held is decoded on every call, as
@@ -407,10 +407,10 @@ class ReplayPack:
             if not is_hub_uri(path):
                 raise ValueError(f"windows= reads a pack's leading windows from the hub by byte range; "
                                  f"{path!r} is not an hf:// URI")
-            return read_rpk(fetch_windows(path, windows, **kw), cls=cls)
+            return read_rpk(fetch_windows(path, windows, **kw))
         if kw:
             raise TypeError(f"load() takes {sorted(kw)} only together with windows=")
-        return read_rpk(fetch(path) if is_hub_uri(path) else path, cls=cls)
+        return read_rpk(fetch(path) if is_hub_uri(path) else path)
 
     @property
     def windows(self):
@@ -551,7 +551,7 @@ class ReplayPack:
 
     @property
     def substrate(self):
-        """The :class:`~dmipy_replay.spec.SubstrateSpec` the walk was driven by, when the pack embeds one."""
+        """The :class:`~dmipy_replay.spec.substrate.SubstrateSpec` the walk was driven by, when the pack embeds one."""
         d = self.meta.get("substrate")
         if d is None:
             return None
@@ -630,8 +630,8 @@ class ReplayPack:
         permeability scales with the diffusivity: the view is the walk at ``(a D, a kappa)`` -- the pair with
         the walked ratio ``kappa / D`` -- and at no other. So one walk at the SLOWEST diffusivity a study needs,
         over the LONGEST time, serves every faster setting on that line at its shorter time as a view, and a
-        setting off the line needs its own walk. :attr:`~dmipy_replay.spec.Tissue.kappa` states the permeability
-        wanted and :attr:`~dmipy_replay.spec.Tissue.D` the diffusivity; given both, they must sit on the line.
+        setting off the line needs its own walk. :attr:`~dmipy_replay.spec.tissue.Tissue.kappa` states the permeability
+        wanted and :attr:`~dmipy_replay.spec.tissue.Tissue.D` the diffusivity; given both, they must sit on the line.
 
         A path walked at ``D0`` and read on a clock divided by ``a`` IS a path walked at ``a D0``: the stored bands
         carry the window's normalisation ``sqrt(2 / T)``, which the view divides by ``sqrt(a)``
@@ -651,7 +651,7 @@ class ReplayPack:
         envelope moves with it: its ``band_hz`` and its ``G_max`` times ``a``.
 
         The result is an ordinary :class:`ReplayPack` sharing this one's arrays, so :meth:`prefix`, the pose
-        cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.Tissue.D` on a replay
+        cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.tissue.Tissue.D` on a replay
         resolves to it. The two similarities, what each keeps, moves and refuses, side by side:
         ``docs/replay-guide/views.md``.
         """
@@ -746,7 +746,7 @@ class ReplayPack:
         ``s G`` (``gamma G . s x``). The surface term at a tissue's ``rho2`` is this pack's at ``rho2 / s``, since
         ``rho2 s ell / (s^2 D) = (rho2 / s) ell / D``. The relaxation gates and the compartment labels are
         unchanged, and so is the field path channel; the grid route reads the scaled positions against the
-        scaled grid. :attr:`~dmipy_replay.spec.Tissue.D` on a replay resolves against the view's diffusivity.
+        scaled grid. :attr:`~dmipy_replay.spec.tissue.Tissue.D` on a replay resolves against the view's diffusivity.
 
         Both directions are exact in the physics; what bounds ``s`` is the certificate. The view at ``G`` is the
         walk at ``s G``, so the envelope the pack is certified for (``replay_envelope.acquisition``) moves to
@@ -851,7 +851,7 @@ class ReplayPack:
 
     @property
     def nominal(self):
-        """The embedded spec's values as a :class:`~dmipy_replay.spec.Tissue`: what a paper's replay applies,
+        """The embedded spec's values as a :class:`~dmipy_replay.spec.tissue.Tissue`: what a paper's replay applies,
         ``replay(seq, tissue=pack.nominal, scanner=pack.nominal_field_T)``; ``None`` for a pack without a spec.
         Its ``T2`` / ``T1`` map the pools that declare one by name (``None`` when none does), so a spec that
         declares a T2 in some pools only gives a tissue the replay refuses, naming the rest."""
@@ -913,7 +913,7 @@ class ReplayPack:
 
         Three things describe a replay setting, each stated once:
 
-        * ``tissue`` -- **what the material is**: a :class:`~dmipy_replay.spec.Tissue` (pool T2 / T1, the walls'
+        * ``tissue`` -- **what the material is**: a :class:`~dmipy_replay.spec.tissue.Tissue` (pool T2 / T1, the walls'
           transverse ``rho2`` and longitudinal ``rho1``, the bulk D, the field source's chi) or ``None``, the
           bare diffusion signal. T2 / T1 are
           ``{pool name: seconds}`` over every pool of the embedded spec, ``inf`` for no decay. ``pack.nominal``
@@ -1110,7 +1110,7 @@ class ReplayPack:
         offset in the prescribed voxel, which is what a played spoiler winds across; a declared ``crusher`` is
         for a winding the waveform does not play in ``G``. The declared one is the voxel-scale spoiler, which a
         micron cell cannot produce geometrically -- a gradient cannot wind much beyond 2 pi across it -- so it
-        is modelled as the forward engine models it (:func:`~dmipy_replay.engine.bloch._build_crusher`): each
+        is modelled as the forward engine models it (dmipy-sim's ``engine.bloch._build_crusher``): each
         walker carries a macroscopic coordinate ``u`` in [0, 1) and accrues ``2 pi n_cycles u`` over each
         crusher window, so the ensemble dephases over ``n_cycles`` turns. Without it every coherence pathway
         of a pulse train stays degenerate and recombines, and the echo barely depends on the refocusing flip
@@ -2117,7 +2117,7 @@ def _band_phase(P, W=None):
 def _path_field_channels(P, waveform):
     """``(Psi, names)``: the C3 path channel's gated field integrals per walker under the prepared acquisition,
     summed over the windows -- the ONE read of that channel, which
-    :func:`~dmipy_replay.fields.hollow_cylinder.field_terms` turns into the isotropic and anisotropic terms for
+    dmipy-sim's ``fields.hollow_cylinder.field_terms`` turns into the isotropic and anisotropic terms for
     :meth:`ReplayPack._walker_phases` and :func:`~dmipy_replay.replay.study.walker_primitives` alike."""
     from .field import path_field_integral
     pm = P["ch"]["susc_field_basis"]

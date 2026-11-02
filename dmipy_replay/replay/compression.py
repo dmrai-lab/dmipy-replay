@@ -1,7 +1,7 @@
 """The codecs a replay pack stores its channels in, and the readers of each.
 
 Every channel of a running integral is stored as bands on ONE basis, the continuous one of the storage window
-(RPK.md 9.5), accumulated by the walk while it runs (:mod:`dmipy_replay.engine.accumulate`); nothing is encoded from
+(RPK.md 9.5), accumulated by the walk while it runs (dmipy-sim's ``engine.accumulate``); nothing is encoded from
 samples on a grid:
 
   * positions (C0) -- ``bridge_dst``, the one representation: per axis the path's two exact endpoints and the lowest
@@ -16,7 +16,7 @@ samples on a grid:
     contact read on the bridge itself (:func:`surface_logweight_bridge`), ``B(t)`` at instants by
     :func:`local_time_at`.
   * the field (C3) -- the cosine modes ``c_k = int e_k b dt`` of the field read along the path
-    (:func:`cosine_mode_scale`, :func:`cosine_projection` the gate's side; the tensors in :mod:`dmipy_replay.replay.bank`).
+    (:func:`cosine_mode_scale`, :func:`cosine_projection` the gate's side; the tensors in dmipy-sim's ``replay.bank``).
   * compartment occupancy (C1) -- named columns, piecewise constant per walker, stored EXACTLY IN TIME: one static
     label per walker, or the events ``(t, label)`` of every change (:func:`encode_events_occupancy`, RPK.md 9.5.7);
     relaxation is the sum over the runs between events of the rate times the gate's on-time, no grid
@@ -497,7 +497,7 @@ OCCUPANCY_COLUMNS = ("comp", "bound")
 
 def occupancy_events(arrays, column):
     """A column's stored events as ``(start (N_w,), EventList)``: the label every walker holds at its first event
-    (the window's start) and its changes after it (:class:`~dmipy_replay.coefficient_walk.EventList`); a static column
+    (the window's start) and its changes after it (dmipy-sim's ``coefficient_walk.EventList``); a static column
     as ``(labels, None)``. Of a pack's ``arrays`` (:class:`~dmipy_replay.replay.decoded.PackArrays`) the arrays are decoded
     once per column and returned read-only (:func:`read_position_coeffs`)."""
     name = column["name"]
