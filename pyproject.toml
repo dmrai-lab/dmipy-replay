@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dmipy-replay"
-version = "0.1.0"
-description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; numpy only"
+version = "0.2.0"
+description = "The reader of Monte-Carlo diffusion-MRI replay packs: the Hub client, the replay, Pulseq, the grid layouts; a NumPy core, with the pose expansion, JAX and torch as extras"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [{ name = "Rutger Fick", email = "fick.rutger@gmail.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -32,7 +32,7 @@ Specification = "https://github.com/dmrai-lab/replay-pack-spec"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0", "safetensors>=0.4"]      # safetensors is the oracle the container is checked against
-pose = ["scipy>=1.10", "threadpoolctl>=3.1", "dmipy-analytic[special]>=3,<4"]    # the pose expansion: scipy's special functions and rotations, the forms that need them; the CPU thread cap
+pose = ["scipy>=1.11", "threadpoolctl>=3.1", "dmipy-analytic[special]>=3,<4"]    # the pose expansion: scipy's special functions and rotations, the forms that need them; the CPU thread cap
 jax = ["jax>=0.6.2"]                            # the JAX kernels, run where backend="jax" is stated
 torch = ["torch>=2.2"]                          # the torch kernels, run where backend="torch" is stated
 all = ["dmipy-replay[pose,jax,torch]"]

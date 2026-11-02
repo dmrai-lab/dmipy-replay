@@ -45,7 +45,7 @@ def __getattr__(name):
     from ._moved import refuse
     raise refuse(__name__, name)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "btensor_invariants", "rotate_waveform",
