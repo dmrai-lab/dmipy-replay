@@ -18,7 +18,7 @@ from .acquisition.scanner_sequence import ScannerSequence, Encoding, Protocol, P
 from .acquisition.rf import B1Pulse, RFEvent, RFSchedule
 from .acquisition.timing import SequenceTiming
 from .acquisition.scanners import ScannerLimits
-from .acquisition.waveforms import set_b, calc_b, calc_btensor, btensor_invariants, rotate_waveform, tile_waveform
+from .acquisition.waveforms import set_b, btensor_invariants, rotate_waveform, tile_waveform
 from .sequences.builders import pgse, pgste, ogse, cpmg, splice, gre, ste, pte
 from .sequences.btable import from_btable
 from .spec.tissue import Tissue
@@ -43,12 +43,13 @@ def __getattr__(name):
     if name in _LAZY:
         import importlib
         return getattr(importlib.import_module(f"{__name__}.{_LAZY[name]}"), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from ._moved import refuse
+    raise refuse(__name__, name)
 
 __version__ = "0.2.0"
 
 __all__ = ["GAMMA", "ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
-           "SequenceTiming", "ScannerLimits", "set_b", "calc_b", "calc_btensor", "btensor_invariants", "rotate_waveform",
+           "SequenceTiming", "ScannerLimits", "set_b", "btensor_invariants", "rotate_waveform",
            "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
            "ReadPlan", "Grid", "hub", "cap_cpu_threads", "Distribution", "FOD", "PoseResponse", "Acquisition",

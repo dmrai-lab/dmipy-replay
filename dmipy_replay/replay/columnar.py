@@ -28,7 +28,7 @@ import numpy as np
 from . import hub
 from ..phantom.grid import Grid
 
-__all__ = ["ColumnarPack", "open_columnar", "Source"]
+__all__ = ["ColumnarPack", "open_columnar", "ColumnSource"]
 
 POOL_KEY = "comp_static"
 RETRIES = 6
@@ -40,7 +40,7 @@ def _grid_of(meta):
     return Grid.from_meta(meta["fidelity"]["per_voxel"]["grid"])
 
 
-class Source:
+class ColumnSource:
     """Bytes of a column file by range: a directory, or a Hub dataset through HTTP range requests at one pinned
     commit (``revision`` resolved to its sha when the layout is opened, so every range of a session reads the same
     files), the CDN location of every file resolved once (afresh after a failed read), the ranges of a view fetched
@@ -169,7 +169,7 @@ class ColumnarPack:
 
     def __init__(self, uri, *, revision="main", workers=8):
         from .replay import _refuse_predating
-        self.uri = uri; self.src = Source(uri, revision=revision, workers=workers)
+        self.uri = uri; self.src = ColumnSource(uri, revision=revision, workers=workers)
         m = json.loads(self.src.text("manifest.json")); self.meta, self.columns = m["meta"], m["columns"]
         _refuse_predating(self.meta, uri, tensors=list(self.columns))
         self.index = json.loads(self.src.text("index.json"))
@@ -621,3 +621,8 @@ class ColumnarPack:
 def open_columnar(uri, *, revision="main", workers=8):
     """The columnar layout at ``uri`` (a directory, or ``hf://owner/name/prefix``) as a :class:`ColumnarPack`."""
     return ColumnarPack(uri, revision=revision, workers=workers)
+
+
+def __getattr__(name):
+    from .._moved import refuse
+    raise refuse(__name__, name)
