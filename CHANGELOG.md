@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **Filter-exchange imaging** (`sequences.fexi`, `fexi_protocol`, `fexi_bvalues`): FEXI as one `ScannerSequence` -- a
+  bipolar filter, a crusher, the store, the mixing time `t_m`, the recall, a crusher, a bipolar detection; three 90s and
+  no 180, each block refocused on its own, the crushers declared before the store and after the recall to select the
+  stimulated echo. `b_f` (the filter's b) and `bvalues` (the detection's) per row, realised exactly; `fexi_protocol` is
+  the filter off and on at every mixing time and detection b-value (one sequence per mixing time); `fexi_bvalues` reads
+  each row's two b-values back off the object and refuses a sequence whose encoding runs across the storage (a PGSTE).
 - **A wall's permeability per instance and over time** (`spec.substrate.PermeabilityTable`, `Wall.permeability_table`):
   piecewise constant in time, one value per instance of the wall's surface in each row and each crossing direction.
   The validator holds it to its shape (positive, strictly increasing breakpoints; one row per interval; one value per
