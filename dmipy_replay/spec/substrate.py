@@ -115,7 +115,24 @@ class Surface:
 
 
 @dataclass(frozen=True)
+class PermeabilityTable:
+    """A wall's permeability per instance and over the walk's time (m/s), piecewise constant in time: row ``j`` of
+    each direction holds from ``breakpoints[j - 1]`` (the start of the walk for the first row) to ``breakpoints[j]``
+    (the end of the walk for the last), and each row gives one value per instance of the wall's surface, in the order
+    of ``surface.instances`` (one value for a surface without instances). ``breakpoints`` are times in seconds from the
+    start of the walk, positive and strictly increasing, and may be empty (a permeability per instance, constant in
+    time). The wall's ``permeability`` is the largest value of each direction's table: the bound a reader that walks
+    the wall sizes its step and its events by."""
+    breakpoints: list = field(default_factory=list)
+    in_to_out: list = field(default_factory=list)
+    out_to_in: list = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class Wall:
+    """A wall between two pools: its surface, the pools inside and outside it, and its physics -- the permeability
+    per crossing direction (``permeability``; with ``permeability_table``, the largest of a permeability per
+    instance and over time), the surface relaxivity and the MT reactivity per side."""
     name: str
     surface: Surface
     inside_pool: int
@@ -123,6 +140,7 @@ class Wall:
     permeability: Directional = Directional()
     surface_relaxivity: Sided = Sided()
     mt_reactivity: Sided = Sided()
+    permeability_table: Optional[PermeabilityTable] = None
 
 
 @dataclass(frozen=True)
@@ -247,8 +265,9 @@ class SubstrateSpec:
         the unit scale a surface read from a file is read at (so the file stands as it is), the per-instance
         :data:`INSTANCE_LENGTHS`, the explicit seeding positions' scale, and the validity lengths
         (``smallest_feature``, ``min_gap``, ``thinnest_shell``) -- with each pool's stated diffusivity multiplied
-        by ``s^2`` and every rate on a wall (permeability, surface relaxivity, MT reactivity, the domain's
-        surface relaxivity; m/s) by ``s``.
+        by ``s^2`` and every rate on a wall (permeability, the values of a permeability table, surface relaxivity, MT
+        reactivity, the domain's surface relaxivity; m/s) by ``s``; a permeability table's breakpoints are times and
+        stay as they are.
 
         Those are the scalings under which diffusion is similar (dmipy-replay#542): the dimensionless walk --
         ``sqrt(D dt) / L``, ``kappa L / D``, ``rho L / D``, ``D T / L^2`` -- is the original's, so a walk of the
@@ -288,8 +307,13 @@ class SubstrateSpec:
                     raise SpecError(f"wall {w.name!r}: the per-instance arrays {unknown} are not known as lengths "
                                     f"({list(INSTANCE_LENGTHS)} are), so their unit under a size scale is unknown")
                 kw["instances"] = {k: L(v) for k, v in sf.instances.items()}
+            table = w.permeability_table
+            if table is not None:
+                table = PermeabilityTable(list(table.breakpoints),
+                                          [[float(v) * s for v in row] for row in table.in_to_out],
+                                          [[float(v) * s for v in row] for row in table.out_to_in])
             walls.append(dataclasses.replace(
-                w, surface=dataclasses.replace(sf, **kw),
+                w, surface=dataclasses.replace(sf, **kw), permeability_table=table,
                 permeability=Directional(float(w.permeability.in_to_out) * s, float(w.permeability.out_to_in) * s),
                 surface_relaxivity=Sided(float(w.surface_relaxivity.inside) * s, float(w.surface_relaxivity.outside) * s),
                 mt_reactivity=Sided(float(w.mt_reactivity.inside) * s, float(w.mt_reactivity.outside) * s)))
@@ -341,7 +365,7 @@ def load_spec(path):
 
 _NESTED = {"domain": Domain, "frame": Frame, "seeding": Seeding, "validity": Validity,
            "surface": Surface, "permeability": Directional, "surface_relaxivity": Sided,
-           "mt_reactivity": Sided, "susceptibility": Susceptibility}
+           "mt_reactivity": Sided, "susceptibility": Susceptibility, "permeability_table": PermeabilityTable}
 
 
 def _build(cls, d):
@@ -370,7 +394,8 @@ def _strip(x):
         return {k: _strip(v) for k, v in x.items()
                 if not (v is None and k in ("center", "radius", "axis", "length", "semiaxes", "rotation", "point",
                                             "normal", "centerline", "file", "format", "scale", "sha256", "instances",
-                                            "column", "cell_type", "voxel_size", "origin", "labels", "crop"))}
+                                            "column", "cell_type", "voxel_size", "origin", "labels", "crop",
+                                            "permeability_table"))}
     if isinstance(x, list):
         return [_strip(v) for v in x]
     return x
@@ -471,6 +496,32 @@ def _label_volume_surface(s, where, pool_names):
             raise SpecError(f"{where}.surface.crop is six voxel indices (i0, j0, k0, i1, j1, k1), got {crop!r}")
         if any(a < 0 for a in crop[:3]) or any(b <= a for a, b in zip(crop[:3], crop[3:])):
             raise SpecError(f"{where}.surface.crop must be a non-empty half-open box, got {crop!r}")
+
+
+def _permeability_table(t, perm, where, n_instances):
+    """Validate a wall's ``permeability_table``: breakpoints positive and strictly increasing, one row per interval of
+    time in each direction, one non-negative value per instance in each row, and the wall's ``permeability`` the
+    largest value of each direction's table."""
+    w = f"{where}.permeability_table"
+    if not isinstance(t, dict):
+        raise SpecError(f"{w} is an object with breakpoints, in_to_out and out_to_in, got {t!r}")
+    b = t.get("breakpoints", [])
+    if not isinstance(b, list) or any(not isinstance(x, (int, float)) or isinstance(x, bool) or not x > 0 for x in b) \
+            or any(y <= x for x, y in zip(b, b[1:])):
+        raise SpecError(f"{w}.breakpoints are positive, strictly increasing times in seconds, got {b!r}")
+    for k in ("in_to_out", "out_to_in"):
+        rows = _req(t, k, w)
+        if not isinstance(rows, list) or len(rows) != len(b) + 1:
+            raise SpecError(f"{w}.{k} holds one row per interval of time ({len(b) + 1}), got {rows!r}")
+        for j, row in enumerate(rows):
+            if not isinstance(row, list) or len(row) != n_instances:
+                raise SpecError(f"{w}.{k}[{j}] holds one value per instance of the surface ({n_instances}), got {row!r}")
+            for v in row:
+                _nonneg(v, f"{w}.{k}[{j}]")
+        largest = max(max(row) for row in rows)
+        if perm[k] != largest:
+            raise SpecError(f"{where}.permeability.{k} is {perm[k]!r} and the largest value of its permeability_table "
+                            f"is {largest!r}; the wall's permeability is that largest value")
 
 
 def validate(d):
@@ -577,6 +628,8 @@ def validate(d):
             _nonneg(_req(perm, k, f"{where}.permeability"), f"{where}.permeability.{k}")
         if op is None and (perm["in_to_out"] > 0 or perm["out_to_in"] > 0):
             raise SpecError(f"{where}: outside_pool is void, so the wall must be impermeable (permeability 0)")
+        if w.get("permeability_table") is not None:
+            _permeability_table(w["permeability_table"], perm, where, len(next(iter(inst.values()))) if inst else 1)
         for k in ("surface_relaxivity", "mt_reactivity"):
             sd = _req(w, k, where)
             for side in ("inside", "outside"):
