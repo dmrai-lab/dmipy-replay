@@ -3,6 +3,14 @@
 All notable changes are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+- **A wall's permeability per instance and over time** (`spec.substrate.PermeabilityTable`, `Wall.permeability_table`):
+  piecewise constant in time, one value per instance of the wall's surface in each row and each crossing direction.
+  The validator holds it to its shape (positive, strictly increasing breakpoints; one row per interval; one value per
+  instance) and the wall's `permeability` to its largest value per direction; `SubstrateSpec.scaled` multiplies its
+  values as rates and keeps its breakpoints. The schema carries it.
+
 ## [0.2.0] - 2026-11-02
 
 dmipy-replay turns a replay pack into a signal or an image: the signal side of the dmipy ecosystem. NumPy at its core,

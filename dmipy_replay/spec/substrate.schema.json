@@ -353,6 +353,48 @@
      },
      "mt_reactivity": {
       "$ref": "#/$defs/sided"
+     },
+     "permeability_table": {
+      "type": "object",
+      "description": "the wall's permeability per instance and over the walk's time, piecewise constant in time; permeability is the largest value of each direction",
+      "required": [
+       "breakpoints",
+       "in_to_out",
+       "out_to_in"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "breakpoints": {
+        "type": "array",
+        "items": {
+         "type": "number",
+         "exclusiveMinimum": 0
+        },
+        "description": "s from the start of the walk, strictly increasing"
+       },
+       "in_to_out": {
+        "type": "array",
+        "items": {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 0
+         }
+        },
+        "description": "m/s; one row per interval of time, one value per instance"
+       },
+       "out_to_in": {
+        "type": "array",
+        "items": {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 0
+         }
+        },
+        "description": "m/s; one row per interval of time, one value per instance"
+       }
+      }
      }
     }
    }
