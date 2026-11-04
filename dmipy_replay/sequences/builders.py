@@ -10,8 +10,10 @@ own vocabulary, an optional ``TE`` (the grid runs from t = 0 to TE; the smallest
     seq = pgse([[1, 0, 0]], delta=0.01, Delta=0.03, gradient_strengths=0.08)  # the amplitude, b follows
     seq.G, seq.G_eff, seq.rf, seq.encoding.bvalues, seq.b(), seq.btensor()
 
-The families: :func:`pgse`, :func:`pgste` (the 3-pulse stimulated echo), :func:`ogse` (cosine or trapezoidal
-trains), :func:`cpmg` (a refocusing train at constant or alternating polarity), :func:`gre`, :func:`ste` and
+The families: :func:`pgse`, :func:`pgste` (the 3-pulse stimulated echo), :func:`fexi` (filter-exchange imaging: a
+bipolar filter, the magnetisation stored over a mixing time, a bipolar detection; :func:`fexi_protocol` its standard
+protocol, :func:`fexi_bvalues` the filter and detection b-values read off a built sequence), :func:`ogse` (cosine or
+trapezoidal trains), :func:`cpmg` (a refocusing train at constant or alternating polarity), :func:`gre`, :func:`ste` and
 :func:`pte` (b-tensor encodings), and the readers of a played gradient :func:`from_waveform`,
 :func:`from_btensor_waveform`, :func:`from_pgste_waveform`. :func:`instantaneous` is a sequence's square limit,
 :func:`to_gradient_array` the square PGSE an analytical layer integrates.
@@ -22,17 +24,17 @@ from dataclasses import replace
 
 import numpy as np
 
-from ..acquisition.rf import RFEvent, RFSchedule
-from ..acquisition.scanner_sequence import Encoding, ScannerSequence
+from ..acquisition.rf import RFEvent, RFSchedule, role_of
+from ..acquisition.scanner_sequence import REFOCUS_ATOL, Encoding, Protocol, ScannerSequence
 from ..constants import DEFAULT_SLEW_RATE
 from ..math.gradient_conversions import g_from_b, q_from_b
 from ..acquisition.waveforms import b_from_gradient
 from ._helpers import _resolve_te, unify_length_reference_delta_Delta
 from .assemble import (PreparedEchoTrain, EchoTrain, GradientEcho, SpinEcho, StimulatedEcho, assemble, axis_pairs, bipolar, cosine,
-                       ramp_of, trapezoid, trapezoid_train)
+                       ramp_of, trapezoid, trapezoid_train, _B_ITER, _B_RTOL, _first_step_at, _steps_before)
 
-__all__ = ["pgse", "pgste", "gre", "cpmg", "ogse", "ste", "pte", "from_waveform", "from_btensor_waveform",
-           "from_pgste_waveform", "instantaneous", "to_gradient_array"]
+__all__ = ["pgse", "pgste", "fexi", "fexi_protocol", "fexi_bvalues", "gre", "cpmg", "ogse", "ste", "pte", "from_waveform",
+           "from_btensor_waveform", "from_pgste_waveform", "instantaneous", "to_gradient_array"]
 
 _INT_TOL = 1e-6
 
@@ -187,6 +189,185 @@ def pgste(gradient_directions, delta, TM, *, bvalues=None, gradient_strengths=No
         build_spec=('pgste', dict(gradient_directions=gradient_directions, delta=delta, TM=TM, bvalues=bvalues,
                                   gradient_strengths=gradient_strengths, TE=TE, n_t=n_t, slew_rate=slew_rate,
                                   timing=timing, ste_flip_angles=ste_flip_angles)))
+
+
+# ── filter-exchange imaging ──────────────────────────────────────────────────────────────────────────────────────
+
+def _samples(x, dt, what):
+    """``x`` seconds as the whole number of samples of ``dt`` it must be, or a refusal naming the nearest."""
+    n = float(x) / float(dt)
+    if abs(n - round(n)) > 1e-6 * max(1.0, abs(n)):
+        raise ValueError(f"{what} = {float(x)*1e3:.6g} ms is {n:.4f} samples of {float(dt)*1e6:.4g} us: it must be a whole "
+                         f"number of them ({int(np.floor(n))} or {int(np.ceil(n))} samples)")
+    return int(round(n))
+
+
+def fexi(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, slew_rate=DEFAULT_SLEW_RATE, timing=None,
+         crusher_duration=1e-3, crusher_cycles=16.0, ste_flip_angles=(90.0, 90.0, 90.0)):
+    """FEXI (filter-exchange imaging, Lasic et al. 2011): a diffusion filter, the magnetisation stored over the mixing
+    time ``t_m``, a detection block; three pulses and no 180.
+
+        90 -[+g_f ... -g_f]- crusher - 90 store - t_m - 90 recall - crusher -[+g_d ... -g_d]- echo
+            '--- filter ---'                                                 '- detection -'
+
+    Each block is a BIPOLAR pair (``+g`` then ``-g``, lobes of ``delta`` whose leading edges are ``Delta`` apart), so it
+    refocuses on its own (``q = 0`` at the store and at the echo) and the mixing time carries no encoding: what the
+    stored magnetisation does over ``t_m`` is exchange and longitudinal relaxation alone. A gap ``Delta - delta``
+    between the lobes gives the block a diffusion time; a contiguous pair has too short a one to separate a restricted
+    pool. The filter and the detection share ``delta`` and ``Delta``, so the time transverse before the store equals
+    the time transverse after the recall and a static field refocuses at the echo (``TE = 2 tau + t_m``).
+
+    The CRUSHERS select the stimulated echo: a voxel-scale winding of ``crusher_cycles`` turns over ``crusher_duration``
+    just before the store and the same just after the recall, declared on ``crusher`` (a winding a micron cell cannot
+    carry geometrically). The pathway they keep is the one whose phase the recall conjugates -- the effective gradient
+    flips sign at the recall (:meth:`~dmipy_replay.acquisition.rf.RFSchedule.sign`) and is zero while stored -- at the
+    amplitude :func:`dmipy_analytic.epg.ste_amplitude` of the three flips (1/2 at 90 degrees); the magnetisation that
+    relaxes back along B0 during ``t_m`` is crushed with the rest.
+
+    ``b_f`` is the filter's b-value and ``bvalues`` the detection's (s/m^2), per row (broadcast against the directions);
+    a row with ``b_f = 0`` plays no filter (the equilibrium reference at the same timing). The amplitudes are found so
+    that each block realises its b, to the float32 rounding of the stored gradient (:func:`fexi_bvalues` reads them
+    back); a block's ramps are
+    ``g / slew_rate`` of the larger of the row's two amplitudes (vertical at ``np.inf``). ``Encoding.bvalues`` is the
+    whole effective gradient's b, the filter's and the detection's added. The grid is ``dt``: ``t_m`` and
+    ``crusher_duration`` are whole numbers of it. With a ``timing`` budget the three pulses last ``t_excite`` each and
+    the blocks keep out of the lead-in and the readout tail. ``ste_flip_angles`` are the three flips; each pulse plays
+    the role its label says whatever its flip.
+    """
+    dt = float(dt)
+    if dt <= 0.0:
+        raise ValueError(f"dt is the sampling interval, a positive time; got {dt}")
+    if float(crusher_duration) <= 0.0:
+        raise ValueError("a filter-exchange sequence selects its stimulated echo with crushers: crusher_duration > 0")
+    b_f_ = np.atleast_1d(np.asarray(b_f, np.float64))
+    b_d_ = np.atleast_1d(np.asarray(bvalues, np.float64))
+    n = max(b_f_.size, b_d_.size, 1 if gradient_directions is None else np.atleast_2d(gradient_directions).shape[0])
+    if gradient_directions is not None and np.atleast_2d(gradient_directions).shape[0] == 1:
+        gradient_directions = np.tile(np.atleast_2d(np.asarray(gradient_directions, np.float64)), (n, 1))
+    dirs, n_m, (b_f_, b_d_, delta_, Delta_) = _rows(gradient_directions, b_f_ if b_f_.size > 1 else b_f_[0],
+                                                     b_d_ if b_d_.size > 1 else b_d_[0], delta, Delta, n=n)
+    dirs = dirs / np.linalg.norm(dirs, axis=1, keepdims=True)
+    if np.any(b_f_ < 0) or np.any(b_d_ < 0):
+        raise ValueError("b_f and bvalues must be non-negative")
+    n_m_mix = _samples(t_m, dt, "t_m")
+    n_c = _samples(crusher_duration, dt, "crusher_duration")
+    if n_m_mix < 1:
+        raise ValueError("t_m must hold at least one sample: the store and the recall are distinct pulses")
+
+    # the amplitudes: each block realises its own b; a row's two blocks share the ramp of the larger amplitude
+    def unit_block(m, eps):
+        return bipolar(delta_[m], Delta_[m], eps, dt)
+
+    def b_unit(blk):
+        return float(b_from_gradient(blk[None, :, None] * np.array([1.0, 0.0, 0.0]), dt)[0])
+
+    a_f, a_d, eps_ = np.zeros(n_m), np.zeros(n_m), np.zeros(n_m)
+    for m in range(n_m):
+        eps = 0.0
+        for _ in range(_B_ITER):
+            bu = b_unit(unit_block(m, eps))
+            af, ad = np.sqrt(b_f_[m] / bu), np.sqrt(b_d_[m] / bu)
+            eps_new = ramp_of(max(af, ad), slew_rate)
+            done = abs(eps_new - eps) <= _B_RTOL * max(eps_new, dt)
+            eps = eps_new
+            if done:
+                break
+        bu = b_unit(unit_block(m, eps))
+        a_f[m], a_d[m], eps_[m] = np.sqrt(b_f_[m] / bu), np.sqrt(b_d_[m] / bu), eps
+    blocks = [unit_block(m, eps_[m]) for m in range(n_m)]
+    n_span = max(len(blk) for blk in blocks)
+
+    # the schedule: tau transverse on either side, the store and the recall t_m apart
+    w = 0.0 if timing is None else float(timing.t_excite)
+    t_exc = 0.0 if timing is None else float(timing.t_prep)
+    lead = 0.0 if timing is None else float(timing.t_lead)
+    tail = 0.0 if timing is None else float(timing.t_readout_pre_echo)
+    if timing is not None:
+        _samples(t_exc, dt, "the timing budget's t_prep")
+    n_w = int(np.ceil(w / 2.0 / dt - 1e-9))                  # half a pulse, in whole samples
+    side = (n_span + n_c + n_w) * dt
+    tau = int(np.ceil(max(lead - t_exc + side, side + tail) / dt - 1e-9)) * dt
+    t_store = t_exc + tau
+    t_recall = t_store + n_m_mix * dt
+    TE = t_recall + tau
+    n_t = int(round(TE / dt)) + 1
+    a1, a2, a3 = (float(a) for a in ste_flip_angles)
+    schedule = RFSchedule([RFEvent(t_exc, a1, 'Mz→Mxy', duration_s=w), RFEvent(t_store, a2, 'store', duration_s=w),
+                           RFEvent(t_recall, a3, 'recall', duration_s=w)])
+    f_end = t_store - (n_w + n_c) * dt                       # the filter ends where its crusher begins
+    d_start = t_recall + (n_w + n_c) * dt                     # the detection starts where its crusher ends
+    i_f_end, i_d0 = _steps_before(f_end, dt), _first_step_at(d_start, dt)
+    G = np.zeros((n_m, n_t, 3))
+    for m, blk in enumerate(blocks):
+        G[m, i_f_end - len(blk):i_f_end] += a_f[m] * blk[:, None] * dirs[m]
+        G[m, i_d0:i_d0 + len(blk)] += a_d[m] * blk[:, None] * dirs[m]
+    crusher = {'windows_s': [(f_end, t_store - w / 2.0), (t_recall + w / 2.0, d_start)],
+               'n_cycles': float(crusher_cycles)}
+    seq = ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, crusher=crusher, family='fexi')
+    # the declared b IS each block's b of the effective gradient the walk integrates
+    bf_num, bd_num = fexi_bvalues(seq)
+    sf = np.where((b_f_ > 0) & (bf_num > 0), np.sqrt(b_f_ / np.where(bf_num > 0, bf_num, 1.0)), 1.0)
+    sd = np.where((b_d_ > 0) & (bd_num > 0), np.sqrt(b_d_ / np.where(bd_num > 0, bd_num, 1.0)), 1.0)
+    i_mid = int(round(t_store / dt))
+    G[:, :i_mid] *= sf[:, None, None]
+    G[:, i_mid:] *= sd[:, None, None]
+    TE_min = TE
+    enc = Encoding(bvalues=b_from_gradient(np.asarray(seq.with_gradient(G).G_eff, np.float64), dt),
+                   gradient_directions=dirs, TE=np.full(n_m, TE), delta=delta_, Delta=Delta_,
+                   tau_perp_SE=np.full(n_m, TE - n_m_mix * dt), ramp_time=eps_, minimum_te=TE_min, te_auto=True,
+                   ste_flip_angles=(a1, a2, a3))
+    return ScannerSequence(
+        G=G, dt=dt, rf=schedule, timing=timing, crusher=crusher, family='fexi', encoding=enc,
+        notes="bipolar filter - crusher - store - t_m (exchange) - recall - crusher - bipolar detection",
+        build_spec=('fexi', dict(gradient_directions=gradient_directions, delta=delta, Delta=Delta, t_m=t_m, b_f=b_f,
+                                 bvalues=bvalues, dt=dt, slew_rate=slew_rate, timing=timing,
+                                 crusher_duration=crusher_duration, crusher_cycles=crusher_cycles,
+                                 ste_flip_angles=ste_flip_angles))).validate()
+
+
+def fexi_protocol(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, **kwargs):
+    """The standard FEXI protocol: the filter off and on, at every mixing time, at every detection b-value, along every
+    direction -- one :func:`fexi` sequence per mixing time (one echo time each), its rows the filter (off, then on at
+    ``b_f``) by the detection b-values by the directions, in that order. ``t_m`` lists the mixing times; ``kwargs`` are
+    :func:`fexi`'s other keywords. Each row's filter and detection b-values, and the mixing time, are read back from the
+    sequences (:func:`fexi_bvalues`, ``ScannerSequence.TM``)."""
+    if float(b_f) <= 0.0:
+        raise ValueError("b_f is the filter's b-value when it is on: positive (the protocol adds the filter-off rows)")
+    dirs = np.atleast_2d(np.asarray(gradient_directions, np.float64))
+    b_d = np.atleast_1d(np.asarray(bvalues, np.float64))
+    filt, bd, dd = (a.reshape(-1) for a in np.meshgrid([0.0, float(b_f)], b_d, np.arange(len(dirs)), indexing="ij"))
+    seqs = [fexi(dirs[dd.astype(int)], delta, Delta, tm, b_f=filt, bvalues=bd, dt=dt, **kwargs)
+            for tm in np.atleast_1d(np.asarray(t_m, np.float64))]
+    return Protocol(seqs)
+
+
+def fexi_bvalues(seq):
+    """``(b_f, b_d)``, ``(n_meas,)`` each in s/m^2: the b-values of a filter-exchange sequence's filter (the effective
+    gradient before the store) and its detection (after the recall), each the package's b integral
+    (:func:`~dmipy_replay.acquisition.waveforms.b_from_gradient`) of that block alone.
+
+    Each is a b-value only because each block refocuses on its own: a sequence without a store and a recall, or
+    whose gradient leaves a net moment at the store (a PGSTE, whose two lobes encode across the mixing time as one), is
+    refused."""
+    if not isinstance(seq, ScannerSequence):
+        raise TypeError(f"fexi_bvalues reads a ScannerSequence; got {type(seq).__name__}")
+    roles = {role_of(e): e for e in seq.rf if role_of(e) in ("store", "recall")}
+    if set(roles) != {"store", "recall"}:
+        raise ValueError("a filter-exchange sequence stores and recalls its magnetisation; this schedule has no "
+                         "store / recall pair")
+    i_store = int(round(roles["store"].t_s / seq.dt))
+    i_recall = int(round(roles["recall"].t_s / seq.dt))
+    G = np.asarray(seq.G_eff, np.float64)
+    pre = np.zeros_like(G)
+    pre[:, :i_store] = G[:, :i_store]
+    post = np.zeros_like(G)
+    post[:, i_recall:] = G[:, i_recall:]
+    q_store = np.abs(np.sum(pre, axis=1) * seq.dt).max(axis=1)
+    q_max = np.abs(np.cumsum(pre, axis=1) * seq.dt).max(axis=(1, 2))
+    if np.any(q_store > REFOCUS_ATOL * np.maximum(q_max, 1e-300)):
+        raise ValueError("the gradient before the store leaves a net moment at the store: the encoding runs across the "
+                         "mixing time (a PGSTE) and has no separate filter b-value")
+    return b_from_gradient(pre, seq.dt), b_from_gradient(post, seq.dt)
 
 
 # ── gradient echoes ──────────────────────────────────────────────────────────────────────────────────────────────

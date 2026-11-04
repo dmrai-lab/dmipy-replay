@@ -106,7 +106,7 @@ field, gradient non-linearity and concomitant fields per voxel (`ScannerLimits`)
 ## Acquisitions
 
 Every acquisition is a `ScannerSequence` (replay-pack-spec ACQUISITION.md): the physical gradient, the RF schedule,
-the readout. Builders cover the families (`pgse`, `pgste`, `ogse`, `cpmg`, `gre`, `ste`, `pte`, `splice`), and
+the readout. Builders cover the families (`pgse`, `pgste`, `fexi`, `ogse`, `cpmg`, `gre`, `ste`, `pte`, `splice`), and
 **Pulseq files are read natively**:
 
 ```python

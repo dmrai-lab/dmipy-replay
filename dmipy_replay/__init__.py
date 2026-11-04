@@ -18,7 +18,7 @@ from .acquisition.rf import B1Pulse, RFEvent, RFSchedule
 from .acquisition.timing import SequenceTiming
 from .acquisition.scanners import ScannerLimits
 from .acquisition.waveforms import set_b, btensor_invariants, rotate_waveform, tile_waveform
-from .sequences.builders import pgse, pgste, ogse, cpmg, splice, gre, ste, pte
+from .sequences.builders import pgse, pgste, fexi, fexi_protocol, fexi_bvalues, ogse, cpmg, splice, gre, ste, pte
 from .sequences.btable import from_btable
 from .spec.tissue import Tissue
 from .spec.substrate import SubstrateSpec
@@ -49,7 +49,7 @@ __version__ = "0.2.0"
 
 __all__ = ["ScannerSequence", "Encoding", "Protocol", "Prescription", "B1Pulse", "RFEvent", "RFSchedule",
            "SequenceTiming", "ScannerLimits", "set_b", "btensor_invariants", "rotate_waveform",
-           "tile_waveform", "pgse", "pgste", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
+           "tile_waveform", "pgse", "pgste", "fexi", "fexi_protocol", "fexi_bvalues", "ogse", "cpmg", "splice", "gre", "ste", "pte", "from_btable", "Tissue", "SubstrateSpec",
            "ReplayPack", "read_rpk", "compile_scheme", "Envelope", "envelope_of", "ColumnarPack", "open_columnar", "RemotePack", "TimeSegmentLayout",
            "ReadPlan", "Grid", "hub", "cap_cpu_threads", "Distribution", "FOD", "PoseResponse", "Acquisition",
            "StudyProtocol", "Study"]
