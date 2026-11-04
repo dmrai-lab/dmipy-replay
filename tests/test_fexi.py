@@ -68,17 +68,20 @@ def test_a_square_block_plays_the_bipolar_stejskal_tanner_amplitude():
     assert abs(g / g_st - 1.0) <= rel
 
 
-def test_the_crushers_bracket_the_storage_in_the_transverse_periods():
+def test_the_crushers_bracket_the_storage_and_spoil_the_mixing_time():
     """One crusher ends at the store and one starts at the recall, each ``crusher_duration`` long and of the same
-    winding: the pair the stimulated echo is selected by. A crusher during the mixing time alone would also keep the
-    pathway that adds the two blocks' phases and the magnetisation recovered along B0."""
+    winding: the pair the stimulated echo is selected by; and a spoiler spans the mixing time, for what the store
+    leaves transverse. No gradient plays under the declared windows."""
     seq = _seq(crusher_duration=1.5e-3, crusher_cycles=12.0)
-    (a0, a1), (b0, b1) = seq.crusher["windows_s"]
+    (a0, a1), (m0, m1), (b0, b1) = seq.crusher["windows_s"]
     t_store, t_recall = seq.rf[1].t_s, seq.rf[2].t_s
     assert a1 == pytest.approx(t_store) and b0 == pytest.approx(t_recall)
+    assert (m0, m1) == pytest.approx((t_store, t_recall))
     assert a1 - a0 == pytest.approx(1.5e-3) and b1 - b0 == pytest.approx(1.5e-3)
-    assert seq.crusher["n_cycles"] == 12.0 and seq.voxel_declared
-    assert np.all(np.asarray(seq.G)[:, int(round(a0 / DT)):int(round(a1 / DT))] == 0.0)
+    assert seq.crusher["n_cycles"] == [12.0, 36.0, 12.0] and seq.voxel_declared
+    G = np.asarray(seq.G)
+    assert np.all(G[:, int(round(a0 / DT)):int(round(a1 / DT))] == 0.0)
+    assert np.all(G[:, int(round(b0 / DT)):int(round(b1 / DT))] == 0.0)
 
 
 def test_the_finite_pulse_budget_keeps_the_blocks_off_the_pulses_and_the_statics_refocused():
@@ -102,6 +105,8 @@ def test_off_grid_times_and_a_missing_crusher_are_refused():
         fexi([1.0, 0.0, 0.0], DELTA, BIG_DELTA, 0.1000049, b_f=1e9, bvalues=0.0, dt=DT, slew_rate=np.inf)
     with pytest.raises(ValueError, match="crusher"):
         fexi([1.0, 0.0, 0.0], DELTA, BIG_DELTA, T_M, b_f=1e9, bvalues=0.0, dt=DT, slew_rate=np.inf, crusher_duration=0.0)
+    with pytest.raises(ValueError, match="whole number of turns"):
+        fexi([1.0, 0.0, 0.0], DELTA, BIG_DELTA, T_M, b_f=1e9, bvalues=0.0, dt=DT, slew_rate=np.inf, crusher_cycles=7.5)
 
 
 def test_a_sequence_without_separate_blocks_has_no_filter_b_value():

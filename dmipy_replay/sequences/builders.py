@@ -217,12 +217,17 @@ def fexi(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, slew_rate=
     pool. The filter and the detection share ``delta`` and ``Delta``, so the time transverse before the store equals
     the time transverse after the recall and a static field refocuses at the echo (``TE = 2 tau + t_m``).
 
-    The CRUSHERS select the stimulated echo: a voxel-scale winding of ``crusher_cycles`` turns over ``crusher_duration``
-    just before the store and the same just after the recall, declared on ``crusher`` (a winding a micron cell cannot
-    carry geometrically). The pathway they keep is the one whose phase the recall conjugates -- the effective gradient
-    flips sign at the recall (:meth:`~dmipy_replay.acquisition.rf.RFSchedule.sign`) and is zero while stored -- at the
-    amplitude :func:`dmipy_analytic.epg.ste_amplitude` of the three flips (1/2 at 90 degrees); the magnetisation that
-    relaxes back along B0 during ``t_m`` is crushed with the rest.
+    The CRUSHERS select the stimulated echo, declared on ``crusher`` as voxel-scale windings (which a micron cell cannot
+    carry geometrically): ``crusher_cycles`` whole turns over ``crusher_duration`` just before the store and the same
+    just after the recall, and a spoiler of three times as many over the mixing time. The pair keeps the pathway whose
+    phase the recall conjugates -- the effective gradient flips sign at the recall
+    (:meth:`~dmipy_replay.acquisition.rf.RFSchedule.sign`) and is zero while stored -- at the amplitude
+    :func:`dmipy_analytic.epg.ste_amplitude` of the three flips (1/2 at 90 degrees), and winds away the pathway that adds
+    the two blocks' phases and the magnetisation that relaxes back along B0 during ``t_m``. The spoiler winds away what
+    the store leaves transverse, which the recall would otherwise turn back with the pair (the store and the recall
+    acting on it as one refocusing pulse). A pathway's winding is ``a n + b m + n`` turns (``a``, ``b`` in -1, 0, 1 the
+    pre-store and mixing-time orders, ``n`` the crushers', ``m`` the spoiler's); with ``m = 3 n`` it vanishes for the
+    stimulated echo alone (``a = -1``, ``b = 0``), where ``m = n`` would also keep what recovers along B0 before the store.
 
     ``b_f`` is the filter's b-value and ``bvalues`` the detection's (s/m^2), per row (broadcast against the directions);
     a row with ``b_f = 0`` plays no filter (the equilibrium reference at the same timing). The amplitudes are found so
@@ -239,6 +244,10 @@ def fexi(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, slew_rate=
         raise ValueError(f"dt is the sampling interval, a positive time; got {dt}")
     if float(crusher_duration) <= 0.0:
         raise ValueError("a filter-exchange sequence selects its stimulated echo with crushers: crusher_duration > 0")
+    n_cyc = float(crusher_cycles)
+    if abs(n_cyc - round(n_cyc)) > 1e-9 or n_cyc < 1:
+        raise ValueError(f"crusher_cycles is a whole number of turns (a fraction leaves a crushed pathway partly in phase "
+                         f"with itself); got {crusher_cycles}")
     b_f_ = np.atleast_1d(np.asarray(b_f, np.float64))
     b_d_ = np.atleast_1d(np.asarray(bvalues, np.float64))
     n = max(b_f_.size, b_d_.size, 1 if gradient_directions is None else np.atleast_2d(gradient_directions).shape[0])
@@ -301,8 +310,9 @@ def fexi(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, slew_rate=
     for m, blk in enumerate(blocks):
         G[m, i_f_end - len(blk):i_f_end] += a_f[m] * blk[:, None] * dirs[m]
         G[m, i_d0:i_d0 + len(blk)] += a_d[m] * blk[:, None] * dirs[m]
-    crusher = {'windows_s': [(f_end, t_store - w / 2.0), (t_recall + w / 2.0, d_start)],
-               'n_cycles': float(crusher_cycles)}
+    crusher = {'windows_s': [(f_end, t_store - w / 2.0), (t_store + w / 2.0, t_recall - w / 2.0),
+                             (t_recall + w / 2.0, d_start)],
+               'n_cycles': [float(n_cyc), 3.0 * n_cyc, float(n_cyc)]}
     seq = ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, crusher=crusher, family='fexi')
     # the declared b IS each block's b of the effective gradient the walk integrates
     bf_num, bd_num = fexi_bvalues(seq)
