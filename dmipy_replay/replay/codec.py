@@ -266,6 +266,15 @@ def is_stored_range(name):
     return bool(_STREAM.match(name) or (name.endswith("_chunks") and _STREAM.match(name[:-len("_chunks")])))
 
 
+def _field_channels(field_meta):
+    """The channels of the field basis a pack declares: its ``n_ch``, or the length of its ``channels`` list."""
+    if "n_ch" in field_meta:
+        return int(field_meta["n_ch"])
+    if field_meta.get("channels"):
+        return len(field_meta["channels"])
+    raise ValueError("the field channel declares neither n_ch nor channels: the shape of its coded modes is unknown")
+
+
 def _range_entry(meta, base, i):
     cx = (meta or {}).get("compression") or {}
     ch = cx.get("channels") or {}
@@ -275,7 +284,7 @@ def _range_entry(meta, base, i):
         ranges, n_ch = (ch.get("boundary_local_time") or {}).get("container"), 1
     else:
         f = ch.get("susc_field_basis") or {}
-        ranges, n_ch = f.get("container"), int(f.get("n_ch", 12))
+        ranges, n_ch = f.get("container"), _field_channels(f)
     if not ranges or i >= len(ranges):
         raise ValueError(f"the tensor {base}_b{i}z.. names a band range the metadata does not declare")
     r = ranges[i]
