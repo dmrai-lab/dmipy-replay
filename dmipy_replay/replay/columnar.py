@@ -172,6 +172,11 @@ class ColumnarPack:
         self.uri = uri; self.src = ColumnSource(uri, revision=revision, workers=workers)
         m = json.loads(self.src.text("manifest.json")); self.meta, self.columns = m["meta"], m["columns"]
         _refuse_predating(self.meta, uri, tensors=list(self.columns))
+        from . import codec
+        codec.refuse_unknown(self.meta)
+        if any("codec" in r for _, ranges in codec.container_ranges(self.meta) for r in ranges):
+            raise NotImplementedError(f"{uri}: the columnar layout reads fixed-width band ranges only; this pack stores a range "
+                                      f"under the {codec.CODEC!r} codec (read it from a .rpk file)")
         self.index = json.loads(self.src.text("index.json"))
         self.n_rows = int(self.index["n_rows"]); self.band_groups = list(self.index["band_groups"]); self.path_groups = list(self.index.get("path_groups", []))
         self.grid = _grid_of(self.meta)
