@@ -216,10 +216,11 @@ def embed_pack(subs, tensors, i, rpk):
         pk, subs[i]["sha256"] = read_rpk(rpk), sha256_of(rpk)
     else:
         pk, subs[i]["sha256"] = rpk, rpk.digest
+    from .codec import CodecRange, without_codec
     for k, v in pk.arrays.items():
-        tensors[f"substrate{i}/{k}"] = np.ascontiguousarray(v)
+        tensors[f"substrate{i}/{k}"] = np.ascontiguousarray(v.fixed_width() if isinstance(v, CodecRange) else v)
     subs[i]["embedded"] = True
-    subs[i]["pack_meta"] = pk.meta
+    subs[i]["pack_meta"] = without_codec(pk.meta)           # the embedded tensors are the fixed-width container's
 
 
 def scatter_volume(shape, voxel_index, values, fill=np.nan):

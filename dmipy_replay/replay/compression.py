@@ -355,7 +355,7 @@ def _load_range(t, bits, m, start=0):
     """The integer band values ``(N, m[, n_axes])`` of a stored tensor (values ``start .. start + m - 1`` of its range):
     :func:`_store_range` inverted."""
     t = np.asarray(t)
-    if bits in NATIVE_BITS:
+    if bits in NATIVE_BITS or t.dtype.kind == "i":                    # integers already: native, or decoded from a codec
         return t[:, start:start + m] if (start or m != t.shape[1]) else t
     off = 1 << (bits - 1)
     if t.ndim == 2:
@@ -368,7 +368,7 @@ def _range_values(t, bits, m, start=0):
     every integer of at most 16 bits is a float64), from the native ``int8`` / ``int16`` tensor or the bit-packed ``uint8``
     rows -- :func:`_load_range` with the one conversion to float64 and the offset taken in place."""
     t = np.asarray(t)
-    if bits in NATIVE_BITS:
+    if bits in NATIVE_BITS or t.dtype.kind == "i":
         return t[:, start:start + m].astype(np.float64)
     q = _unpack_from(t, bits, start, m).astype(np.float64)
     q -= 1 << (bits - 1)
@@ -707,7 +707,7 @@ def _read_position_coeffs(arrays, axes, dtype, lo=0, hi=None):
         k0 = 0
         for r, bits in ranges:
             t = arrays[range_name(POSITION_AXES[i], r, bits)]
-            m = int(t.shape[1]) if bits in NATIVE_BITS else min(int(t.shape[1]) * 8 // bits, K_b - k0)
+            m = int(t.shape[1]) if (bits in NATIVE_BITS or t.dtype.kind == "i") else min(int(t.shape[1]) * 8 // bits, K_b - k0)
             a0, a1 = max(k0, lo), min(k0 + m, hi)
             if a1 > a0:
                 s = table[:, i, a0:a1]

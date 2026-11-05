@@ -23,6 +23,7 @@ import re
 import numpy as np
 
 from . import hub
+from . import codec as _codec
 from .container import DTYPES, parse_header
 from .hub import _coalesce, parse_uri
 from .planning import PLAN_TOL, planned
@@ -86,10 +87,59 @@ class RemotePack:
         self._variance = {}
         from .replay import _refuse_predating
         _refuse_predating(self.meta, uri, tensors=list(header))
-        stubs = {k: _Stub(d["shape"], _NP[d["dtype"]]) for k, d in header.items()}
+        _codec.refuse_unknown(self.meta)
+        self._coded = self._coded_ranges(header)
+        stubs = {k: _Stub(d["shape"], _NP[d["dtype"]]) for k, d in header.items() if not _codec.is_stored_range(k)}
+        for fixed, c in self._coded.items():           # a coded range is planned by the bytes it is stored in
+            dt = _codec.lane_dtype(c["bits"])
+            stubs[fixed] = _Stub((-(-self._stored_bytes(c) // dt.itemsize),), dt)
         self._skeleton = _Skeleton(stubs, self.meta, source=uri)
         self._skeleton.remote = self
         self._skeleton.susceptibility_field                          # refuses a header whose declared field and channels disagree
+
+    # ---- the ranges stored under a codec
+    def _coded_ranges(self, header):
+        """``{fixed-width name: description}`` of the band ranges the file stores under a codec: the chunk stream and chunk
+        table tensors, the depth, the chunk size and the shape of the integers the range decodes to."""
+        out = {}
+        for name in header:
+            m = _codec._STREAM.match(name)
+            if not m:
+                continue
+            r, n_ch, width = _codec._range_entry(self.meta, m["base"], int(m["i"]))
+            if r.get("codec") != _codec.CODEC or int(r["bits"]) != int(m["bits"]):
+                raise ValueError(f"tensor {name!r} is not the {_codec.CODEC} range the metadata declares ({r})")
+            if f"{name}_chunks" not in header:
+                raise ValueError(f"tensor {name!r} has no chunk table {name + '_chunks'!r}")
+            from .compression import range_name
+            fixed = m["prefix"] + range_name(m["base"], int(m["i"]), int(m["bits"]))
+            out[fixed] = dict(stream=name, chunks=f"{name}_chunks", bits=int(m["bits"]), chunk_walkers=int(r["chunk_walkers"]),
+                              tail=(n_ch, width) if m["base"] == "susc_path_dct" else (width,))
+        return out
+
+    def _stored_bytes(self, c):
+        a, b = self._table[c["stream"]]["data_offsets"]
+        return int(b - a)
+
+    def _names(self):
+        """The tensors of the file as a reader names them: the file's, with each coded range's stream and chunk table
+        replaced by the fixed-width name of the range."""
+        return [n for n in self._table if not _codec.is_stored_range(n)] + list(self._coded)
+
+    def _coded_range(self, fixed, n_rows=None):
+        """The :class:`~dmipy_replay.replay.codec.CodecRange` of coded range ``fixed`` over its first ``n_rows`` walkers (all by
+        default): the chunk table, and the stream's bytes up to the end of the last chunk those walkers need, by byte range."""
+        c = self._coded[fixed]
+        n_w = self.n_walkers
+        n = n_w if n_rows is None else min(int(n_rows), n_w)
+        self._fetch([c["chunks"]])
+        chunks = self._held[c["chunks"]]
+        end = int(chunks[-(-n // c["chunk_walkers"])])
+        s, e = self._bytes_of(c["stream"])
+        blob = self._range(s, s + end - 1) if end else b""
+        self.bytes_fetched += end
+        return _codec.CodecRange(np.frombuffer(blob, np.uint8), chunks, bits=c["bits"], chunk_walkers=c["chunk_walkers"],
+                                 n_walkers=n_w, tail=c["tail"], n_held=n)
 
     # ---- what the file holds
     @property
@@ -131,7 +181,7 @@ class RemotePack:
         n_p, why = pilot_size(self.meta, self.n_walkers)
         key = (n_p, json.dumps(pm, sort_keys=True, default=str))
         if key not in self._variance:
-            names = [k for k in self._table if "/" not in k and (k.startswith("susc_path") or k == "band_block")]
+            names = [k for k in self._names() if "/" not in k and (k.startswith("susc_path") or k == "band_block")]
             rows = self._fetch_rows(names, n_p)
             self._variance[key] = _measured_mode_variance(rows, pm)
         return self._variance[key], why
@@ -153,8 +203,12 @@ class RemotePack:
         return merged, got
 
     def _fetch(self, names):
-        """Fetch the tensors ``names`` not held yet, by byte range, and hold them."""
+        """Fetch the tensors ``names`` not held yet, by byte range, and hold them (a coded range as a
+        :class:`~dmipy_replay.replay.codec.CodecRange` over its chunks)."""
         want = [n for n in names if n not in self._held]
+        for n in [n for n in want if n in self._coded]:
+            self._held[n] = self._coded_range(n)
+        want = [n for n in want if n not in self._coded]
         if not want:
             return
         spans = {n: self._bytes_of(n) for n in want}
@@ -170,6 +224,8 @@ class RemotePack:
         tables among them whole: what a pilot of the first walkers reads."""
         n_w = self.n_walkers
         spans, shapes = {}, {}
+        coded = {n: self._coded_range(n, n_rows) for n in names if n in self._coded}
+        names = [n for n in names if n not in self._coded]
         for n in names:
             d = self._table[n]
             shape = list(d["shape"])
@@ -184,6 +240,7 @@ class RemotePack:
         for n, (s, e) in spans.items():
             ms, me = next(r for r in merged if r[0] <= s and e <= r[1])
             out[n] = np.frombuffer(got[(ms, me)][s - ms: e - ms + 1], dtype=_NP[self._table[n]["dtype"]]).reshape(shapes[n])
+        out.update(coded)
         return out
 
     # ---- the replay
@@ -239,7 +296,7 @@ class RemotePack:
         m_starts = [int(r["modes"][0]) for r in pmeta.get("container") or []]
         m_ends = [int(r["modes"][1]) for r in pmeta.get("container") or []]
         names, K_read, M_read = [], 0, 0
-        for n in self._table:
+        for n in self._names():
             base = n.split("/")[-1]
             mp, mm = _POS_RANGE.match(base), _MODE_RANGE.match(base)
             if mp:

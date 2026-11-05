@@ -353,9 +353,9 @@ class ReplayPack:
         return _as_distribution(orientation)
 
     def __init__(self, arrays, meta, source=None):
-        self.arrays = arrays
         self.meta = dict(meta)
         self.source = source
+        self.arrays = arrays
 
     @property
     def arrays(self):
@@ -365,7 +365,8 @@ class ReplayPack:
 
     @arrays.setter
     def arrays(self, arrays):
-        self._arrays = PackArrays(arrays)
+        from .codec import expand
+        self._arrays = PackArrays(expand(arrays, self.meta))
 
     @property
     def decoded_bytes(self):
@@ -1550,8 +1551,8 @@ class ReplayPack:
         from .planning import planned_bytes
         read = stored = 0
         for seg, _, _ in windows:
-            table = {k: (np.shape(v), np.dtype(v.dtype).itemsize) for k, v in seg.arrays.items()
-                     if k.startswith(("pos_", "susc_path"))}
+            table = {k: (((v.stored_nbytes,), 1) if hasattr(v, "stored_nbytes") else (np.shape(v), np.dtype(v.dtype).itemsize))
+                     for k, v in seg.arrays.items() if k.startswith(("pos_", "susc_path"))}
             r, st = planned_bytes(table, seg.meta, K, M)
             read += r; stored += st
         return ReadPlan(K=int(K), K_stored=int(self.K), band_error=float(eK), band_variance=src_K, bands_chosen=how_K,
