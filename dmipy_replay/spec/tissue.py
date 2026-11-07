@@ -62,12 +62,13 @@ class Tissue:
       as ``T1`` is a second gate beside ``T2`` on the occupancy (C1).
     * ``D`` (m^2/s): the bulk diffusivity -- the walk's recorded value unless given, for a pack; a closed form's
       diffusion coefficient. Given on a pack, the pack is READ at that diffusivity
-      (:meth:`~dmipy_replay.replay.ReplayPack.at_diffusivity`): the block and the window divided by ``D / D_walk``, every
-      channel following in its own space, which is what a change of temperature does. Faster than walked only.
+      (:meth:`~dmipy_replay.replay.ReplayPack.at_diffusivity`): the block and the window divided by ``a = D / D_walk``,
+      every channel following in its own space, which is what a change of temperature does, and the envelope moved by
+      ``a`` (its band and ``G_max`` times ``a``; a slower view's ``chi_max`` too).
     * ``kappa`` (m/s): the walls' permeability the pack is READ at (:meth:`~dmipy_replay.replay.ReplayPack.at_permeability`).
       A walk realised one ratio ``kappa / D``, and the same path is the walk at ``(a D, a kappa)`` for any
-      ``a >= 1``: stating ``kappa`` picks ``a``, stating ``D`` too must agree, and a pair off the walk's line is
-      refused. One walk at the slowest, longest setting of a study serves every faster one on its line.
+      ``a > 0``: stating ``kappa`` picks ``a``, stating ``D`` too must agree, and a pair off the walk's line is
+      refused. One walk serves every setting on its line, a slower one within ``a`` times its band.
     * ``chi_iso`` / ``chi_aniso``: the field source's susceptibility (C3), evaluated at the scanner's field.
     """
     T2: Optional[object] = None

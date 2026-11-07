@@ -5,6 +5,13 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **A time view at any diffusivity** (`ReplayPack.at_diffusivity`, `Tissue(D=)`, `Tissue(kappa=)`): a view at
+  `a = D / D_walk` is the walk at the mapped request -- `G(t)` on the view is `G(t' / a) / a` on the walk, `B0 chi` is
+  `B0 chi / a`, `rho2` is `rho2 / a` -- so its envelope is the walk's moved by `a` (`band_hz` and `G_max` times `a`, and a
+  slower view's `chi_max` times `a`) and every request inside it is certified by the walk's own terms. A slower view
+  (`a < 1`) is served: its band is `a` times the walked band, and a waveform beyond it, a gradient beyond `a` times
+  `G_max` or a field scale beyond the moved one is refused by name, the refusal naming the view.
+  `provenance.diffusivity_scaled` records `a` cumulative over repeated views.
 - **Filter-exchange imaging** (`sequences.fexi`, `fexi_protocol`, `fexi_bvalues`): FEXI as one `ScannerSequence` -- a
   bipolar filter, a crusher, the store, the mixing time `t_m`, the recall, a crusher, a bipolar detection; three 90s and
   no 180, each block refocused on its own, the crushers declared before the store and after the recall to select the
