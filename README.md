@@ -34,7 +34,7 @@ licences.
 | the substrate's pose | `orientation=` a 3x3 rotation or the lab direction of its axis | all |
 | a distribution of poses (Watson, Bingham, an FOD, every pose) | `orientation=dr.Distribution.watson(8.0)`, `dr.FOD.from_sh(c, basis=)`; `pack.pose_response(seq)` | all |
 | B1+ scale, finite / shaped pulses, pulse trains, off-resonance | `pack.replay_bloch(seq, b1_scale=0.9, off_resonance_T=)` | all |
-| a faster diffusivity, a smaller or larger substrate | `tissue=dr.Tissue(D=)`, `pack.at_length_scale(s)` | views |
+| another diffusivity, a smaller or larger substrate | `tissue=dr.Tissue(D=)`, `pack.at_length_scale(s)` | views |
 | one pool, every walker | `compartment=1`, `pack.walker_signals(seq)` | |
 
 A pack replays only the tiers it carries and **refuses** a knob outside them by name. It never returns a

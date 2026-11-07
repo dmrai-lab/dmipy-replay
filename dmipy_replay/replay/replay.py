@@ -238,11 +238,24 @@ def field_term(declared, tissue, scanner, envelope=None):
 GRADIENT_RTOL = 1e-6
 
 
+def _views(meta):
+    """The views a header ``meta`` is, as a refusal names them: a length-scaled view (:meth:`ReplayPack.at_length_scale`,
+    its limits over ``s``), a time-scaled view (:meth:`ReplayPack.at_diffusivity`, the band and the amplitude times
+    ``a``), both, or none (an empty list)."""
+    prov = meta.get("provenance") or {}
+    ls, ts = prov.get("length_scaled"), prov.get("diffusivity_scaled")
+    views = []
+    if ls:
+        views.append(f"length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s")
+    if ts:
+        views.append(f"time-scaled view, a = {float(ts['a']):.4g}: the pack's band and G_max times a")
+    return views
+
+
 def _view_of(meta):
-    """How a refusal names the header's envelope: the pack's, or a length-scaled view's moved one."""
-    ls = (meta.get("provenance") or {}).get("length_scaled")
-    return (f" (length-scaled view, s = {float(ls['s']):.4g}: the pack's limits over s, replay_envelope.acquisition)"
-            if ls else " (replay_envelope.acquisition)")
+    """How a refusal names the header's envelope: the pack's, or a view's moved one (:func:`_views`)."""
+    views = _views(meta)
+    return f" ({'; '.join(views)}, replay_envelope.acquisition)" if views else " (replay_envelope.acquisition)"
 
 
 def check_acquisition_envelope(meta, waveform, *, field_active=False):
@@ -264,8 +277,9 @@ def check_acquisition_envelope(meta, waveform, *, field_active=False):
     range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`). No slew is checked: no term of the
     certificate depends on a waveform's slew except through the band its ramps need.
 
-    A length-scaled view (:meth:`ReplayPack.at_length_scale`) carries its moved ``G_max`` in the same header key and is
-    held to it by this function; its refusals name the view. Returns the :class:`Envelope`."""
+    A view (:meth:`ReplayPack.at_length_scale`, :meth:`ReplayPack.at_diffusivity`) carries its moved ``G_max`` and
+    ``band_hz`` in the same header keys and is held to them by this function; its refusals name the view. Returns the
+    :class:`Envelope`."""
     from .envelope import Envelope
     env = Envelope.from_header(meta)
     via = _view_of(meta)
@@ -629,10 +643,10 @@ class ReplayPack:
         THE PAIR, AND THE COMPUTE IT SAVES. Across a permeable wall the walk realised a crossing probability
         per encounter of about ``kappa sqrt(dt / D)``, which the rescale leaves unchanged only when the
         permeability scales with the diffusivity: the view is the walk at ``(a D, a kappa)`` -- the pair with
-        the walked ratio ``kappa / D`` -- and at no other. So one walk at the SLOWEST diffusivity a study needs,
-        over the LONGEST time, serves every faster setting on that line at its shorter time as a view, and a
-        setting off the line needs its own walk. :attr:`~dmipy_replay.spec.tissue.Tissue.kappa` states the permeability
-        wanted and :attr:`~dmipy_replay.spec.tissue.Tissue.D` the diffusivity; given both, they must sit on the line.
+        the walked ratio ``kappa / D`` -- and at no other. So one walk serves every setting on that line as a view,
+        and a setting off the line needs its own walk. :attr:`~dmipy_replay.spec.tissue.Tissue.kappa` states the
+        permeability wanted and :attr:`~dmipy_replay.spec.tissue.Tissue.D` the diffusivity; given both, they must sit on
+        the line.
 
         A path walked at ``D0`` and read on a clock divided by ``a`` IS a path walked at ``a D0``: the stored bands
         carry the window's normalisation ``sqrt(2 / T)``, which the view divides by ``sqrt(a)``
@@ -642,19 +656,26 @@ class ReplayPack:
         about 2.5 per cent per kelvin for water. The same path is the walk at ``(a D0, a kappa)`` across a
         permeable wall and at no other pair, and the pair is recorded in ``provenance.diffusivity_scaled``.
 
-        Only faster than walked is served (``a >= 1``). The certificate was measured at the walked grid: the
-        split-half floor and the codec error are the same statistics on the same coefficients, but the in-step
-        integration bias goes as ``D dt^2``, which is ``D0 dt0^2 / a`` -- it falls for ``a > 1`` and grows for
-        ``a < 1``, past what the walk's block was chosen to keep below the floor. A published pack does
-        not carry what would re-certify it, so a slower replay is refused rather than returned uncertified;
-        walk the pack at the slower diffusivity. The acquisition must still fit the shortened walk, ``T / a``,
-        which the replay checks as it checks every waveform. The view at ``G(t)`` is the walk at ``G(a t) / a``, so the
-        envelope moves with it: its ``band_hz`` and its ``G_max`` times ``a``.
+        THE ENVELOPE MOVES WITH THE CLOCK. With ``t' = a t`` the walk's clock, a waveform ``G(t)`` on the view is the
+        waveform ``G(t' / a) / a`` on the walk, a field scale ``B0 chi`` on the view the walk's ``B0 chi / a``, and a
+        surface relaxivity ``rho2`` the walk's ``rho2 / a``. So the view's envelope is the walk's moved by ``a``: its
+        ``band_hz`` and its ``G_max`` times ``a`` (``rho2_over_D_max`` is a ratio to the diffusivity and moves with it),
+        its ``chi_max`` times ``a`` on a slower view -- a faster one keeps the walk's, inside the ``a chi_max`` it
+        could state, so that its field modes are planned as the walk's are -- and a request inside the view's
+        envelope IS a request inside the walk's: every term of the certificate (the band truncation, the block
+        quadrature, the codec, the rounding, the step, the field's read, the Monte-Carlo floor) is the walk's own,
+        evaluated at the walk's request. This holds in both directions. A faster view (``a > 1``) serves a wider band
+        and a stronger gradient over a shorter walk, ``T / a``; a slower one (``a < 1``) a longer walk at a narrower
+        band, a weaker gradient and a smaller field scale: a waveform beyond ``a`` times the walked band is refused by
+        the band check (:meth:`_check_band`), one beyond ``a`` times the walked ``G_max`` by the envelope check
+        (:func:`check_acquisition_envelope`), each naming the view, and a field scale beyond the moved one by
+        :func:`field_term`. The band in hertz is what a slower view gives up: the walk stores ``K`` bands over ``T``,
+        and the view spreads them over ``T / a``.
 
         The result is an ordinary :class:`ReplayPack` sharing this one's arrays, so :meth:`prefix`, the pose
         cache and every route read it as they read any pack; :attr:`~dmipy_replay.spec.tissue.Tissue.D` on a replay
-        resolves to it. The two similarities, what each keeps, moves and refuses, side by side:
-        ``docs/replay-guide/views.md``.
+        resolves to it. ``provenance.diffusivity_scaled`` records ``a`` cumulative over repeated views. The two
+        similarities, what each keeps, moves and refuses, side by side: ``docs/replay-guide/views.md``.
         """
         import copy
         D0 = self.diffusivity
@@ -666,13 +687,6 @@ class ReplayPack:
             raise ValueError(f"a diffusivity is a positive number; got {D!r} against the walk's {D0!r}")
         if a == 1.0:
             return self
-        if a < 1.0:
-            raise ValueError(
-                f"a replay at D = {float(D):.3g} m^2/s is slower than the walk's {float(D0):.3g} (a = {a:.3f}), "
-                f"which stretches the block grid and grows the in-step integration bias as 1/a beyond what the "
-                f"pack's certificate covers. Faster than walked is free; slower needs a walk at that "
-                f"diffusivity, or a pack that recorded enough to re-certify a stretched grid, which this one did "
-                f"not (dmipy-sim#289)")
         meta = copy.deepcopy(self.meta)
         wp = meta.setdefault("walk_params", {})
         wp["diffusivity"] = float(D)
@@ -683,10 +697,14 @@ class ReplayPack:
         cx = meta.get("compression") or {}
         if cx.get("temporal_bandwidth_hz") is not None:
             cx["temporal_bandwidth_hz"] = float(cx["temporal_bandwidth_hz"]) * a
-        acq = (meta.get("replay_envelope") or {}).get("acquisition") or {}
-        for key in ("band_hz", "G_max", "slew_max"):         # the view at G(t) is the walk at G(a t) / a: every frequency
+        env = meta.get("replay_envelope") or {}
+        acq = env.get("acquisition") or {}
+        for key in ("band_hz", "G_max", "slew_max"):         # G(t) on the view is G(t' / a) / a on the walk: every frequency
             if acq.get(key) is not None:                     # and the amplitude move by a (slew_max, a class header's, by a^2)
                 acq[key] = float(acq[key]) * (a * a if key == "slew_max" else a)
+        tis = env.get("tissue") or {}
+        if tis.get("chi_max") is not None and a < 1.0:       # B0 chi on the view is B0 chi / a on the walk: a slower view
+            tis["chi_max"] = float(tis["chi_max"]) * a       # holds a times the walk's scale, a faster one keeps the walk's
         pm = (cx.get("channels") or {}).get("susc_field_basis")
         if pm is not None:
             pm["T"] = float(pm["T"]) / a                     # the field's modes are read over the shorter window
@@ -711,10 +729,18 @@ class ReplayPack:
                         if isinstance(pool.get(key), (int, float)) and pool[key]:
                             pool[key] = float(pool[key]) * a
         prov = meta.setdefault("provenance", {})
-        prov["diffusivity_scaled"] = dict(walked=float(D0), replayed=float(D), a=a,
-                                          grid_dt=dict(walked=float(self.dt), replayed=float(self.dt) / a),
+        before = prov.get("diffusivity_scaled")
+        if before is None:
+            D_walk, dt_walk, a_total = float(D0), float(self.dt), a
+        else:                                                # a view of a view: the walk's values, a cumulative
+            D_walk, dt_walk, a_total = float(before["walked"]), float(before["grid_dt"]["walked"]), float(before["a"]) * a
+            for key, k in kappa.items():
+                k["walked"] = float(before["permeability"][key]["walked"])
+        prov["diffusivity_scaled"] = dict(walked=D_walk, replayed=float(D), a=a_total,
+                                          grid_dt=dict(walked=dt_walk, replayed=float(self.dt) / a),
                                           permeability=kappa,
-                                          certificate="measured at the walked grid; the in-step bias falls as 1/a")
+                                          certificate="the walk's, over its envelope moved by a: band_hz and G_max "
+                                                      "times a, chi_max times min(a, 1)")
         from .compression import rescale_bands
         # the bands are normalised by sqrt(2 / T): read over T / a they are the stored ones / sqrt(a)
         arrays = rescale_bands(self.arrays, 1.0 / np.sqrt(a))
@@ -757,12 +783,14 @@ class ReplayPack:
         ``provenance.length_scaled`` (``s`` cumulative over repeated views), with the battery's ``b_max`` over
         ``s^2`` beside it.
 
-        With :meth:`at_diffusivity` (``a >= 1``) a target ``(L, D, T)`` is reached from a walk ``(L0, D0, T0)``
-        by ``s = L / L0`` then ``a = D / (s^2 D0)`` when ``D / L^2 >= D0 / L0^2`` and ``D T / L^2 <= D0 T0 / L0^2``:
-        one walk per shape at the slowest ``D / L^2`` over the longest ``D T / L^2`` serves every size and every
-        faster diffusivity, read with :meth:`prefix` where it is longer than needed. The result is an ordinary
-        :class:`ReplayPack`: :meth:`prefix`, the pose cache and every route read it as they read any pack. The two
-        similarities, what each keeps, moves and refuses, side by side: ``docs/replay-guide/views.md``.
+        With :meth:`at_diffusivity` a target ``(L, D, T)`` is reached from a walk ``(L0, D0, T0)`` by ``s = L / L0``
+        then ``a = D / (s^2 D0)`` when ``D T / L^2 <= D0 T0 / L0^2``, the walk reaching as far across the structure as
+        the target; the view's band and ``G_max`` are then ``a`` and ``a / s`` times the walk's. So one walk per shape
+        over the longest ``D T / L^2`` serves every size and diffusivity, read with :meth:`prefix` where it is longer
+        than needed, and the targets slower than the walk in ``D / L^2`` (``a < 1``) are served for the waveforms within
+        ``a`` times its band. The result is an ordinary :class:`ReplayPack`: :meth:`prefix`, the pose cache and every
+        route read it as they read any pack. The two similarities, what each keeps, moves and refuses, side by side:
+        ``docs/replay-guide/views.md``.
         """
         import copy
         from .compression import POSITION_AXES
@@ -845,7 +873,7 @@ class ReplayPack:
                 raise ValueError(
                     f"the pair (D = {float(D):.3g} m^2/s, kappa = {float(kappa):.3g} m/s) is not on this walk's line: "
                     f"the walk realised kappa / D = {float(k0) / float(self.diffusivity):.3g} s/m^2 and a rescale "
-                    f"keeps that ratio, so it serves (a D_walk, a kappa_walk) for any a >= 1 and no other pair. "
+                    f"keeps that ratio, so it serves (a D_walk, a kappa_walk) for any a > 0 and no other pair. "
                     f"D asks for a = {a_d:.4g}, kappa for a = {a_k:.4g}; a setting off the line needs its own "
                     f"walk (dmipy-sim#289)")
         return self.at_permeability(kappa)
@@ -1769,8 +1797,9 @@ class ReplayPack:
             raise ValueError(f"the waveform's gradient reaches beyond the band of the envelope {env.name!r} this pack is "
                              f"certified for: it needs {need} and the envelope admits band_hz = {env.band_hz:.4g} Hz "
                              f"({admitted} bands){_view_of(self.meta)}. Replay a waveform within it")
+        views = "".join(f"; {v}" for v in _views(self.meta))
         raise ValueError(f"the waveform's gradient reaches beyond this pack's temporal band: it needs {need} and the "
-                         f"pack resolves {self.temporal_bandwidth_hz:.4g} Hz (K = {self.K} bands over {float(self.windows['T']) * 1e3:.4g} ms), "
+                         f"pack resolves {self.temporal_bandwidth_hz:.4g} Hz (K = {self.K} bands over {float(self.windows['T']) * 1e3:.4g} ms{views}), "
                          f"which would drop up to {err:.2e} of the signal into phase the pack does not carry, against the "
                          f"{b['budget']:.2e} it may cost (its cap {b['cap']:.2e} from {b['cap_source']} less {b['other_terms']:.2e} "
                          f"of other certified terms). Walk a pack whose envelope holds this band, or replay a waveform "

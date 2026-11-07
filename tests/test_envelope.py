@@ -198,6 +198,86 @@ def test_the_diffusivity_view_moves_band_and_amplitude_with_its_clock():
     assert v.envelope.band_hz == pytest.approx(v.temporal_bandwidth_hz)
 
 
+def _pgse_on_view(a, g=0.1, slew=200.0):
+    """The walk's ``pgse(g)`` as the view at ``a`` plays it: ``G(t)`` on the view is ``G(t' / a) / a`` on the walk's
+    clock ``t' = a t``, so the view's waveform has every time over ``a``, its amplitude times ``a`` and its slew times
+    ``a^2`` (``a = 1`` is the walk's own)."""
+    return dr.pgse([[1.0, 0.0, 0.0], [0.0, 0.6, 0.8]], TD["delta"] / a, TD["Delta"] / a, gradient_strengths=g * a,
+                   slew_rate=slew * a * a)
+
+
+@pytest.mark.parametrize("a", [0.25, 0.5, 2.0])
+def test_the_time_view_is_the_walk_at_the_mapped_waveform_in_both_directions(a):
+    """A view at ``a`` replays the walk at the mapped waveform, slower (``a < 1``) as faster, to rounding: the signal,
+    the surface term (``rho2`` on the view is ``rho2 / a`` on the walk) and the band the waveform needs (the same bands,
+    at ``a`` times the frequency)."""
+    p = pack_of("cylinder")
+    v = p.at_diffusivity(a * p.diffusivity)
+    on_view, on_walk = _pgse_on_view(a), _pgse_on_view(1.0)
+    np.testing.assert_allclose(v.replay(on_view, complex_signal=True), p.replay(on_walk, complex_signal=True), rtol=1e-12)
+    rho2 = 2e-5
+    surface = p.replay(on_walk, tissue=dr.Tissue(rho2=rho2))
+    assert not np.allclose(surface, p.replay(on_walk), rtol=1e-3)                       # the contact tier is live
+    np.testing.assert_allclose(v.replay(on_view, tissue=dr.Tissue(rho2=a * rho2)), surface, rtol=1e-12)
+    (hz_v, bands_v, err_v), (hz, bands, err) = v.waveform_band(on_view), p.waveform_band(on_walk)
+    assert bands_v == bands and hz_v == pytest.approx(a * hz) and err_v == pytest.approx(err, rel=1e-6)
+    assert v.envelope.band_hz == pytest.approx(a * p.envelope.band_hz) and v.envelope.G_max == pytest.approx(a * p.envelope.G_max)
+
+
+def test_a_slower_view_holds_the_band_times_a_and_refuses_beyond_it_by_name():
+    """A slower view spreads the walk's ``K`` bands over ``T / a``: its band is ``a`` times the walk's. A 300 Hz OGSE
+    the walk (800 Hz) and the view at ``a = 1/2`` (400 Hz) serve is refused by the view at ``a = 1/4`` (200 Hz), naming
+    the view; the walk refuses the same request mapped onto its clock (1200 Hz), so the guard is the walk's own."""
+    p = pack_of("cylinder", G_max=10.0)                                   # the fixture's own amplitude: the band binds first
+    seq = dr.ogse([[1.0, 0.0, 0.0]], 300.0, 0.01, shape="cosine", gradient_strengths=1.0, slew_rate=np.inf)
+    half, quarter = (p.at_diffusivity(a * p.diffusivity) for a in (0.5, 0.25))
+    assert quarter.temporal_bandwidth_hz == pytest.approx(200.0) and quarter.envelope.band_hz == pytest.approx(200.0)
+    p.replay(seq)
+    half.replay(seq)
+    with pytest.raises(ValueError, match=r"beyond this pack's temporal band: it needs \S+ Hz .* resolves 200 Hz "
+                                         r"\(K = 64 bands over 160 ms; time-scaled view, a = 0\.25"):
+        quarter.replay(seq)
+    with pytest.raises(ValueError, match="beyond this pack's temporal band"):
+        p.replay(dr.ogse([[1.0, 0.0, 0.0]], 1200.0, 0.0025, shape="cosine", gradient_strengths=4.0, slew_rate=np.inf))
+
+
+def test_a_slower_view_holds_g_max_times_a_by_name():
+    p = pack_of("cylinder")                                               # G_max = 0.3 T/m
+    v = p.at_diffusivity(0.25 * p.diffusivity)
+    assert v.envelope.G_max == pytest.approx(0.075)
+    p.replay(pgse(0.1))
+    v.replay(pgse(0.05))
+    with pytest.raises(ValueError, match=r"G_max = 0\.075 T/m per axis .*time-scaled view, a = 0\.25"):
+        v.replay(pgse(0.1))                                               # inside the walk's, beyond the view's
+
+
+def test_a_slower_view_holds_the_field_scale_times_a_and_a_faster_one_keeps_the_walks():
+    """``B0 chi`` on the view is ``B0 chi / a`` on the walk: a slower view's field scale is ``a`` times the walk's, and
+    the view at ``chi`` replays as the walk at ``chi / a``. A faster view keeps the walk's ``chi_max``, inside the
+    ``a chi_max`` it could state, so its field modes are planned as the walk's are."""
+    p = pack_of("field")                                                  # chi_max 2e-7 up to 7 T
+    slow, fast = p.at_diffusivity(0.5 * p.diffusivity), p.at_diffusivity(2.0 * p.diffusivity)
+    assert slow.envelope.chi_max == pytest.approx(1e-7) and fast.envelope.chi_max == p.envelope.chi_max
+    TE = 0.006
+    p.replay(dr.gre(TE), tissue=dr.Tissue(chi_iso=-1.5e-7), scanner=7.0)
+    with pytest.raises(ValueError, match="certified field scale"):
+        slow.replay(dr.gre(TE / 0.5), tissue=dr.Tissue(chi_iso=-1.5e-7), scanner=7.0)
+    np.testing.assert_allclose(slow.replay(dr.gre(TE / 0.5), tissue=dr.Tissue(chi_iso=-0.5e-7), scanner=7.0, complex_signal=True),
+                               p.replay(dr.gre(TE), tissue=dr.Tissue(chi_iso=-1e-7), scanner=7.0, complex_signal=True), rtol=1e-12)
+
+
+def test_a_view_of_a_view_records_a_cumulative_and_the_walks_values():
+    p = pack_of("permeable")
+    D, kappa = p.diffusivity, p.permeability
+    twice = p.at_diffusivity(0.5 * D).at_diffusivity(0.25 * D)
+    rec = twice.meta["provenance"]["diffusivity_scaled"]
+    assert rec["a"] == pytest.approx(0.25) and rec["walked"] == D and rec["replayed"] == pytest.approx(0.25 * D)
+    assert rec["grid_dt"]["walked"] == p.dt and rec["permeability"]["wall_0.in_to_out"]["walked"] == kappa
+    once = p.at_diffusivity(0.25 * D)
+    seq = _pgse_on_view(0.25)
+    np.testing.assert_allclose(twice.replay(seq, complex_signal=True), once.replay(seq, complex_signal=True), rtol=1e-12)
+
+
 # ------------------------------------------------------------------------------------------------ class headers
 def test_a_scanner_class_header_reads_as_its_stored_band_and_amplitude():
     c = class_pack_of("cylinder", slew_max=1.0)                           # a slew the replay no longer reads
