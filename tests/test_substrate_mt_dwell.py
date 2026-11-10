@@ -15,8 +15,10 @@ def _spec(mt_reactivity, mt_dwell):
                    instances={"centers": [[-2e-6, 0.0, 0.0], [2e-6, 0.0, 0.0]], "radii": [1e-6, 0.8e-6]})
     wall = Wall("objects", surf, 1, 0, mt_reactivity=mt_reactivity, mt_dwell=mt_dwell)
     pools = [PoolSpec(0, "extra", None), PoolSpec(1, "intra", None)]
+    binds = mt_reactivity.inside > 0 or mt_reactivity.outside > 0                 # the exchange tier is a binding wall's
+    tiers = ["gradient", "relaxation", "surface"] + (["exchange"] if binds else [])
     return SubstrateSpec("test/mt", Domain([-4e-6] * 3, [4e-6] * 3, ["periodic", "periodic", "open"]), pools, [wall],
-                         Seeding([0, 1]), Validity(0.8e-6, ["gradient", "relaxation", "surface", "exchange"]))
+                         Seeding([0, 1]), Validity(0.8e-6, tiers))
 
 
 def test_a_binding_wall_states_its_dwell_and_round_trips():
