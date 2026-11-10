@@ -5,6 +5,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **A wall that binds states its bound pool's mean dwell** (`Wall.mt_dwell`, a `Dwell` of seconds per side;
+  dmrai-lab/dmrai#72). Stated exactly when a side's `mt_reactivity` is positive, positive on each side that binds and
+  0 on each side that does not, refused by name otherwise; a time, so `SubstrateSpec.scaled` keeps it. A wall that
+  binds nothing writes none: every existing spec reads and writes as it did.
 - **A time view at any diffusivity** (`ReplayPack.at_diffusivity`, `Tissue(D=)`, `Tissue(kappa=)`): a view at
   `a = D / D_walk` is the walk at the mapped request -- `G(t)` on the view is `G(t' / a) / a` on the walk, `B0 chi` is
   `B0 chi / a`, `rho2` is `rho2 / a` -- so its envelope is the walk's moved by `a` (`band_hz` and `G_max` times `a`, and a
