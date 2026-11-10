@@ -10,6 +10,7 @@ equivalence (:func:`susceptibility_field_of`: some pool magnetic <=> ``"field"``
 from __future__ import annotations
 
 import dataclasses
+import math
 import json
 from dataclasses import dataclass, field, asdict, fields, is_dataclass
 from pathlib import Path
@@ -129,10 +130,20 @@ class PermeabilityTable:
 
 
 @dataclass(frozen=True)
+class Dwell:
+    """The MT bound pool's mean dwell (s) on each side of a wall: how long a spin that binds there stays bound before
+    its release, on average (the release rate ``1 / dwell``). Positive exactly on the sides whose ``mt_reactivity`` is,
+    0 on a side that binds nothing."""
+    inside: float = 0.0
+    outside: float = 0.0
+
+
+@dataclass(frozen=True)
 class Wall:
     """A wall between two pools: its surface, the pools inside and outside it, and its physics -- the permeability
     per crossing direction (``permeability``; with ``permeability_table``, the largest of a permeability per
-    instance and over time), the surface relaxivity and the MT reactivity per side."""
+    instance and over time), the surface relaxivity and the MT reactivity per side, and, on a wall that binds, the
+    bound pool's mean dwell per side (``mt_dwell``; ``None`` exactly when neither side is MT-reactive)."""
     name: str
     surface: Surface
     inside_pool: int
@@ -141,6 +152,7 @@ class Wall:
     surface_relaxivity: Sided = Sided()
     mt_reactivity: Sided = Sided()
     permeability_table: Optional[PermeabilityTable] = None
+    mt_dwell: Optional[Dwell] = None
 
 
 @dataclass(frozen=True)
@@ -266,8 +278,8 @@ class SubstrateSpec:
         :data:`INSTANCE_LENGTHS`, the explicit seeding positions' scale, and the validity lengths
         (``smallest_feature``, ``min_gap``, ``thinnest_shell``) -- with each pool's stated diffusivity multiplied
         by ``s^2`` and every rate on a wall (permeability, the values of a permeability table, surface relaxivity, MT
-        reactivity, the domain's surface relaxivity; m/s) by ``s``; a permeability table's breakpoints are times and
-        stay as they are.
+        reactivity, the domain's surface relaxivity; m/s) by ``s``; a permeability table's breakpoints and the MT
+        dwell are times and stay as they are.
 
         Those are the scalings under which diffusion is similar (dmipy-replay#542): the dimensionless walk --
         ``sqrt(D dt) / L``, ``kappa L / D``, ``rho L / D``, ``D T / L^2`` -- is the original's, so a walk of the
@@ -365,7 +377,8 @@ def load_spec(path):
 
 _NESTED = {"domain": Domain, "frame": Frame, "seeding": Seeding, "validity": Validity,
            "surface": Surface, "permeability": Directional, "surface_relaxivity": Sided,
-           "mt_reactivity": Sided, "susceptibility": Susceptibility, "permeability_table": PermeabilityTable}
+           "mt_reactivity": Sided, "susceptibility": Susceptibility, "permeability_table": PermeabilityTable,
+           "mt_dwell": Dwell}
 
 
 def _build(cls, d):
@@ -395,7 +408,7 @@ def _strip(x):
                 if not (v is None and k in ("center", "radius", "axis", "length", "semiaxes", "rotation", "point",
                                             "normal", "centerline", "file", "format", "scale", "sha256", "instances",
                                             "column", "cell_type", "voxel_size", "origin", "labels", "crop",
-                                            "permeability_table"))}
+                                            "permeability_table", "mt_dwell"))}
     if isinstance(x, list):
         return [_strip(v) for v in x]
     return x
@@ -524,6 +537,34 @@ def _permeability_table(t, perm, where, n_instances):
                             f"is {largest!r}; the wall's permeability is that largest value")
 
 
+def _mt_dwell(w, where):
+    """A wall's ``mt_dwell`` against its ``mt_reactivity``: stated exactly when a side binds, positive on each side that
+    binds and 0 on each side that does not."""
+    react = w["mt_reactivity"]
+    binds = {side: float(react[side]) > 0.0 for side in ("inside", "outside")}
+    dw = w.get("mt_dwell")
+    if dw is None:
+        if any(binds.values()):
+            raise SpecError(f"{where}: mt_reactivity binds on the {' and '.join(s for s, b in binds.items() if b)} side but "
+                            f"the wall states no mt_dwell: a wall that binds states its bound pool's mean dwell (s) per side")
+        return
+    if not any(binds.values()):
+        raise SpecError(f"{where}: mt_dwell is stated on a wall whose mt_reactivity is 0 on both sides; a wall that binds "
+                        f"nothing has no bound pool (leave mt_dwell out)")
+    for side in ("inside", "outside"):
+        v = _req(dw, side, f"{where}.mt_dwell")
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+            raise SpecError(f"{where}.mt_dwell.{side} must be a finite number of seconds, got {v!r}")
+        if binds[side] and not v > 0.0:
+            raise SpecError(f"{where}.mt_dwell.{side} is {v!r}: the {side} side binds (mt_reactivity "
+                            f"{react[side]!r} m/s), so its bound pool's dwell is positive")
+        if not binds[side] and v != 0.0:
+            raise SpecError(f"{where}.mt_dwell.{side} is {v!r} on a side that binds nothing (mt_reactivity 0): 0")
+    extra = sorted(set(dw) - {"inside", "outside"})
+    if extra:
+        raise SpecError(f"{where}.mt_dwell: unknown keys {extra}")
+
+
 def validate(d):
     """Validate a spec dict; raises :class:`SpecError` naming the offending field, returns the dict."""
     if is_dataclass(d):
@@ -634,6 +675,7 @@ def validate(d):
             sd = _req(w, k, where)
             for side in ("inside", "outside"):
                 _nonneg(_req(sd, side, f"{where}.{k}"), f"{where}.{k}.{side}")
+        _mt_dwell(w, where)
     seed = d["seeding"]
     sp = _req(seed, "pools", "seeding")
     if not sp or any(not (isinstance(i, int) and 0 <= i < n_pools) for i in sp):

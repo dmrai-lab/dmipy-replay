@@ -395,6 +395,25 @@
         "description": "m/s; one row per interval of time, one value per instance"
        }
       }
+     },
+     "mt_dwell": {
+      "type": "object",
+      "description": "the MT bound pool's mean dwell (s) per side: positive exactly on the sides whose mt_reactivity is, 0 on the others; stated exactly when a side binds",
+      "required": [
+       "inside",
+       "outside"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "inside": {
+        "type": "number",
+        "minimum": 0
+       },
+       "outside": {
+        "type": "number",
+        "minimum": 0
+       }
+      }
      }
     }
    }
