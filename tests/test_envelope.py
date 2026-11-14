@@ -2,6 +2,7 @@
 per-axis amplitude, the field channel's refocusing depth and the field strength, each refused by name, on every route
 that takes a waveform; the views are held to their moved envelopes by the same check. A header that states a scanner
 class is read as an envelope by the stated rule."""
+import re
 import sys
 from pathlib import Path
 
@@ -313,3 +314,63 @@ def test_the_stamp_states_what_the_rule_reads_and_changes_only_the_header(tmp_pa
     assert dr.read_rpk(tmp_path / "out" / "field.rpk").envelope == c.envelope
     with pytest.raises(ValueError, match="no guarantee to stamp"):
         stamp_meta(pack_of("cylinder", bound="b_max").meta)
+
+
+# ------------------------------------------------------------------------------------------------ a spent cap
+def _capped(p, cap, other=3e-3):
+    """``p`` with a stated numerical cap beside one certified non-truncation term of ``other``."""
+    fid = dict(p.meta["fidelity"], target_floor=cap, err_quadrature=other)
+    fid.pop("err_max", None)
+    fid.pop("err_truncation", None)
+    return type(p)(p.arrays, dict(p.meta, fidelity=fid), source=p.source)
+
+
+def test_a_cap_spent_by_the_other_terms_refuses_by_that_cause_not_by_a_needed_frequency():
+    """Where the other certified terms reach the cap the truncation budget is zero: a waveform with a gradient is refused
+    for that, naming the cap, its source and the terms that spend it, and no frequency the waveform needs; the same pack
+    certified to a larger cap admits it."""
+    p = pack_of("cylinder")
+    spent = _capped(p, cap=3e-3)
+    assert spent.truncation_budget["budget"] == 0.0
+    with pytest.raises(ValueError) as e:
+        spent.replay(pgse(0.1))
+    msg = str(e.value)
+    b = spent.truncation_budget
+    assert f"cap {b['cap']:.2e} (from fidelity.target_floor)" in msg and f"{b['other_terms']:.2e} of other certified terms" in msg
+    assert b["other_terms"] > b["cap"]
+    assert "exhaust the cap" in msg and "zero allowance for truncation error" in msg
+    assert "larger cap or smaller numerical terms" in msg
+    assert "Hz" not in msg and "needs" not in msg and "temporal band" not in msg
+    _capped(p, cap=3e-2).replay(pgse(0.1))
+
+
+def test_a_zero_gradient_waveform_is_admitted_on_a_pack_with_a_spent_cap():
+    spent = _capped(pack_of("cylinder"), cap=3e-3)
+    assert spent.truncation_budget["budget"] == 0.0
+    spent.replay(dr.pgse([[1.0, 0.0, 0.0]], TD["delta"], TD["Delta"], gradient_strengths=0.0, slew_rate=200.0))
+
+
+def test_a_waveform_beyond_the_band_of_a_pack_with_a_budget_keeps_its_message():
+    p = _capped(pack_of("cylinder", G_max=10.0), cap=3e-2)
+    b = p.truncation_budget
+    assert b["budget"] > 0.0
+    seq = dr.ogse([[1.0, 0.0, 0.0]], 1200.0, 0.0025, shape="cosine", gradient_strengths=4.0, slew_rate=np.inf)
+    with pytest.raises(ValueError, match=r"^the waveform's gradient reaches beyond this pack's temporal band: it needs "
+                                         r"\S+ Hz \(\d+ bands over the .* ms it spans\) and the pack resolves 800 Hz .* which would drop up to .* against "
+                                         + re.escape(f"the {b['budget']:.2e} it may cost (its cap {b['cap']:.2e} from fidelity.target_floor less "
+                                                      f"{b['other_terms']:.2e} of other certified terms). Walk a pack whose envelope "
+                                                      "holds this band")):
+        p.replay(seq)
+
+
+def test_the_columnar_plan_names_a_spent_cap_the_same_way():
+    from columnar_scenarios import seqs
+    seq = seqs(dr)["pgse_short"]
+    lay = open_columnar(str(DATA / "columnar_quant"))
+    fid = lay.meta["fidelity"]
+    fid.update(target_floor=3e-3, err_quadrature=3e-3)
+    fid.pop("err_max", None)
+    fid.pop("err_truncation", None)
+    assert lay.truncation_budget["budget"] == 0.0
+    with pytest.raises(ValueError, match=r"they exhaust the cap and leave zero allowance for truncation error"):
+        lay.plan(seq)

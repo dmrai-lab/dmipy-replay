@@ -243,6 +243,9 @@ class ColumnarPack:
         beyond = 0.5 * np.clip(total - pb.sum(axis=1), 0.0, None)                  # the bands never read, per measurement
         budget = self.truncation_budget
         if beyond.max() > budget["budget"]:
+            if budget["budget"] == 0.0:
+                from .replay import zero_budget_message
+                raise ValueError(zero_budget_message(budget))
             raise ValueError(f"the waveform's gradient reaches beyond this layout's temporal band: the {K} bands of its "
                              f"envelope {env.name!r} ({K / (2.0 * self.T_window):.4g} Hz) leave up to {beyond.max():.2e} of the "
                              f"signal in phase the layout does not carry, against the {budget['budget']:.2e} it may cost (its "
