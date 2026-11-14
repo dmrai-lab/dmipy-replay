@@ -1791,6 +1791,8 @@ class ReplayPack:
         if bands <= admitted:
             return
         b = self.truncation_budget
+        if b["budget"] == 0.0:
+            raise ValueError(zero_budget_message(b))
         need = (f"more than {CONTINUOUS_BAND_CAP * self.K * windows / (2.0 * T):.4g} Hz over the {T * 1e3:.4g} ms it spans"
                 if not np.isfinite(hz) else f"{hz:.4g} Hz ({bands} bands over the {T * 1e3:.4g} ms it spans)")
         if admitted < stored:
@@ -2086,6 +2088,14 @@ def truncation_budget(meta, *, floor, floor_source):
     left_over = (float(fid["err_max"]) - float(fid["err_truncation"])) if fid.get("err_max") is not None else 0.0
     other = max(named, left_over)
     return dict(cap=cap, cap_source="fidelity.target_floor", other_terms=other, budget=max(cap - other, 0.0))
+
+def zero_budget_message(b):
+    """The refusal of a waveform whose gradient a pack cannot carry because its certified non-truncation terms already
+    reach its cap: ``b`` is :func:`truncation_budget`'s record, whose ``budget`` is zero."""
+    return (f"this pack's cap {b['cap']:.2e} (from {b['cap_source']}) is spent by {b['other_terms']:.2e} of other certified "
+            f"terms: they exhaust the cap and leave zero allowance for truncation error, so no waveform with a gradient "
+            f"can be replayed on it. Replay on a pack certified with a larger cap or smaller numerical terms")
+
 
 CONTINUOUS_BAND_CAP = 64
 
