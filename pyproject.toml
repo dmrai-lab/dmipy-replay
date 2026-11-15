@@ -46,3 +46,4 @@ include = ["dmipy_replay*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--durations=25 --durations-min=1.0"
