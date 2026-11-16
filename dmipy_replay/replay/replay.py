@@ -1041,7 +1041,7 @@ class ReplayPack:
         return w, w, planned(E, self._full_plan("the vector-Bloch route reads every band and mode"))
 
     def walker_phases(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None,
-                      weights=None, tol=PLAN_TOL, K=None, modes=None, T2_b=None, T1_b=None):
+                      weights=None, tol=PLAN_TOL, K=None, modes=None, T2_b=None, T1_b=None, delta_omega_b=None):
         """:meth:`walker_signals` before the complex exponential: ``(w, ew, phi)`` with ``phi`` the accumulated
         phase of every walker at every measurement, ``(n_w, n_meas)`` real, so that ``E = exp(1j * phi)``. A
         consumer that reduces many walkers over its own groups (an image: the walkers of each voxel) takes the
@@ -1056,10 +1056,10 @@ class ReplayPack:
         if view is not self:
             return view.walker_phases(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
                                       compartment=compartment, weights=weights, tol=tol, K=K, modes=modes,
-                                      T2_b=T2_b, T1_b=T1_b)
+                                      T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         read = dict(tol=tol, K=K, modes=modes) if weights is None else dict(tol=None, K=None, modes=None)   # a caller's weights are on every band
         P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, read=read,
-                          T2_b=T2_b, T1_b=T1_b)
+                          T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         if np.any(P["voxel"] != 1.0):
             raise ValueError(
                 "this encoding leaves a net moment at the readout, so the voxel's extent multiplies the signal by "

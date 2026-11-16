@@ -145,7 +145,6 @@ def test_the_oracle_reproduces_the_stated_values():
     pulses, T, value = J
     assert oracle(pulses, T, J_COMP, J_BOUND)[0] == pytest.approx(value, abs=1e-9)
     assert value == pytest.approx(np.exp(-600.0 * H), abs=1e-9)
-    # the block-end label, the whole-block average and no bound pool, each of which the specification rules out
     assert np.exp(-(10 * 2.5e-4 + 1000 * 1.5e-4)) == pytest.approx(CASES["C"][2], abs=1e-9)
 
 
@@ -224,6 +223,13 @@ def _hand_logw(comp_ev, bound_ev, R2c, R2b):
         g, b = _label_at(comp_ev, u), _label_at(bound_ev, u)
         tot += (v - u) * ((1 - b) * R2c[g] + b * R2b)
     return -tot
+
+
+def test_a_bound_occupancy_other_than_0_or_1_is_refused():
+    gate = CumulativeGate(np.ones(int(round(TE / H)) + 1), H)
+    with pytest.raises(ValueError, match="0 or 1"):
+        relaxation_logweight_runs(_arrays([(COMP0, [(0.0, 0), (1e-3, 2)])]), COMP, [1 / R2[0], 1 / R2[1]], [np.inf] * 2, gate, gate,
+                                  t0=0.0, t1=TE, bound_column=BOUND, T2_b=T2_B, T1_b=np.inf)
 
 
 def test_the_scalar_runs_weigh_the_joint_occupancy():
@@ -346,6 +352,7 @@ def test_the_bound_pool_knobs_are_required_and_refused_by_name(bound_pack, spin_
     refused(TEXT_NEEDS_T2_T1, pack.replay_bloch, spin_echo, T1_b=0.05, delta_omega_b=0.0, **t)
     refused(TEXT_NEEDS_DELTA, pack.replay_bloch, spin_echo, T2_b=1e-3, T1_b=0.05, **t)                 # a Bloch read without delta_omega_b
     refused(TEXT_SCALAR_DELTA, pack.replay, spin_echo, T2_b=1e-3, T1_b=0.05, delta_omega_b=0.0, **t)    # delta_omega_b to a scalar route
+    refused(TEXT_SCALAR_DELTA, pack.walker_phases, spin_echo, T2_b=1e-3, T1_b=0.05, delta_omega_b=0.0, **t)
     refused(TEXT_SCALAR_DELTA, pack.walker_signals, spin_echo, T2_b=1e-3, T1_b=0.05, delta_omega_b=0.0, **t)
     refused(TEXT_NO_COLUMN, free.replay, spin_echo, T2_b=1e-3, **t)                                    # a pack without the column
     refused(TEXT_NO_COLUMN, free.replay, spin_echo, delta_omega_b=0.0, **t)

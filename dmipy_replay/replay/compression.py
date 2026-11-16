@@ -868,6 +868,8 @@ def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, act
             raise ValueError("the bound column's runs need T2_b and T1_b")
         rb2, rb1 = float(_rates([T2_b])[0]), float(_rates([T1_b])[0])
         w, t, g, b = _joint_runs(arrays, column, bound_column)
+        if np.any((b != 0) & (b != 1)):
+            raise ValueError("the bound column's occupancy is 0 or 1 (RPK.md 5.3)")
         n_w = int(w[-1]) + 1 if w.size else 0
         last = np.r_[w[1:] != w[:-1], True]
         t_a = np.maximum(t, float(t0))
