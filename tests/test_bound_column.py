@@ -364,25 +364,43 @@ def test_the_bound_pool_knobs_are_required_and_refused_by_name(bound_pack, spin_
 
 # ---- compatibility: a pack without the column, against the client as it was ------------------------------------------
 
+def _host_matches_golden():
+    """Whether this host's vectorised ``exp`` reproduces the one that wrote the golden values (it differs in the last bit between
+    CPU instruction sets): only then is the golden compared bit for bit, else to a relative 1e-14."""
+    x = np.linspace(-12.0, 0.0, 2001)
+    c = np.load(DATA / "host_canary.npz")
+    return bool(np.array_equal(np.exp(x), c["exp"]) and np.array_equal(np.exp(1j * x), c["cexp"]))
+
+
+def _same(a, b):
+    a, b = np.asarray(a), np.asarray(b)
+    if _host_matches_golden():
+        assert np.array_equal(a, b)
+    else:
+        assert a.shape == b.shape and np.allclose(a, b, rtol=1e-14, atol=0.0)
+
+
 def _with_event_in(pack, t_hi):
     return np.array([any(0.0 < t <= t_hi for t, _ in ev[1:]) for ev in _comp_events(pack)])
 
 
 def test_a_pack_without_the_bound_column_reads_as_it_did(spin_echo):
-    """(i) The scalar route is bit for bit what it was. (ii) The Bloch route is bit for bit what it was for every walker whose
+    """(i) The scalar route is bit for bit what it was (on a host whose ``exp`` is the golden's; else to 1e-14). (ii) The Bloch route is bit for bit what it was for every walker whose
     ``comp`` holds no event in ``(0, TE]`` and agrees with the exact scalar route for every walker that has one (the golden
     value of 1758 of them was more than 1e-9 off)."""
     g = np.load(DATA / "bound_regression_golden.npz")
     pack = dr.read_rpk(DATA / "slab_exchange.rpk")
     w, ew, E = pack.walker_signals(spin_echo, tissue=TISSUE, tol=None)
-    assert np.array_equal(np.asarray(w), g["scalar_w"]) and np.array_equal(np.asarray(ew), g["scalar_ew"])
-    assert np.array_equal(np.asarray(E), g["scalar_E"])
-    assert np.array_equal(np.asarray(pack.replay(spin_echo, tissue=TISSUE, complex_signal=True, tol=None)), g["scalar_mean"])
+    assert np.array_equal(np.asarray(w), g["scalar_w"])
+    _same(ew, g["scalar_ew"])
+    _same(E, g["scalar_E"])
+    _same(pack.replay(spin_echo, tissue=TISSUE, complex_signal=True, tol=None), g["scalar_mean"])
     prim = pack.walker_primitives(spin_echo, tol=None)
     assert not prim.has_bound and prim.exposure_t2.shape[1] == 2
     w2, ew2, E2 = prim.signals(TISSUE)
-    assert np.array_equal(ew2, g["study_ew"]) and np.array_equal(E2, g["study_E"])
-    assert np.array_equal(np.asarray(prim.signal(TISSUE, complex_signal=True)), g["study_mean"])
+    _same(ew2, g["study_ew"])
+    _same(E2, g["study_E"])
+    _same(prim.signal(TISSUE, complex_signal=True), g["study_mean"])
 
     has = _with_event_in(pack, TE)
     assert np.array_equal(has, g["has_event"])                                   # the recomputed set on (0, TE]
@@ -395,5 +413,5 @@ def test_a_pack_without_the_bound_column_reads_as_it_did(spin_echo):
                   new_differs_from_golden=int((np.abs(np.abs(bl[:, 0]) - np.abs(old[:, 0])) > 1e-9).sum()))
     print(counts)
     assert counts == dict(no_event=6234, with_event=1766, old_off_by_more_than_1e9=1758, new_differs_from_golden=1758)
-    assert np.array_equal(bl[~has], old[~has])                                   # the protected set: bit for bit
+    _same(bl[~has], old[~has])                                                   # the protected set: bit for bit
     assert np.abs(np.abs(bl[has, 0]) - exact[has]).max() < 1e-12                 # the others: the exact runs
