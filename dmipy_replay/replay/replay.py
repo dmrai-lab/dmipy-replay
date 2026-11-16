@@ -923,7 +923,7 @@ class ReplayPack:
         return [float(v) for v in _by_pool_id(spec, values, what)]
 
     def replay(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None, complex_signal=False,
-               tol=PLAN_TOL, K=None, modes=None):
+               tol=PLAN_TOL, K=None, modes=None, T2_b=None, T1_b=None, delta_omega_b=None):
         """The signal of ``waveform`` on this pack: the gradient always, and every other tier whose inputs are given
         and which the pack carries.
 
@@ -971,30 +971,42 @@ class ReplayPack:
         returning a plausible number.
 
         ``compartment`` restricts the ensemble mean to one pool id (or a boolean walker mask).
+
+        **The bound pool.** A pack that carries the C1 ``bound`` occupancy column (RPK.md 5.3) is read with the joint
+        occupancy ``f_bound = b``, ``f_g = (1 - b) [comp = g]``: the rate of a walker is ``R(t) = sum_c f_c(t) R_c``, exact
+        over the runs of both columns (RPK.md 8.8, 9.5.7). The bound pool's relaxation times ``T2_b`` and ``T1_b`` (s,
+        ``inf`` for no decay) are required with a tissue that relaxes and are refused on a pack without the column;
+        ``delta_omega_b`` (rad/s), the bound pool's offset, is read by :meth:`replay_bloch` only. No default exists for any.
         """
         waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
         if isinstance(waveform, Protocol):                # a multi-TE scheme: each sequence replayed, placed at its rows
             kw = dict(tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
-                      complex_signal=complex_signal, tol=tol, K=K, modes=modes)
+                      complex_signal=complex_signal, tol=tol, K=K, modes=modes, T2_b=T2_b, T1_b=T1_b,
+                      delta_omega_b=delta_omega_b)
             parts = [self.replay(seq, **kw) for seq in waveform]
             out = planned(waveform.scatter(parts), tuple(p.plan for p in parts))      # one plan per sequence
             return out
         view = self._at_tissue(tissue)
         if view is not self:
             return view.replay(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
-                               compartment=compartment, complex_signal=complex_signal, tol=tol, K=K, modes=modes)
+                               compartment=compartment, complex_signal=complex_signal, tol=tol, K=K, modes=modes,
+                               T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         dist = self._as_distribution(orientation)
         if dist is not None:
+            if T2_b is not None or T1_b is not None or delta_omega_b is not None:
+                raise ValueError("the pose expansion does not read the bound pool: T2_b, T1_b and delta_omega_b are given "
+                                 "to a replay at one pose")
             S = self.pose_response(waveform, tissue=tissue, scanner=scanner, compartment=compartment).compose(dist)
             return planned(S if complex_signal else np.abs(S), self._full_plan("the pose expansion reads every band and mode"))
         P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
-                          read=dict(tol=tol, K=K, modes=modes))
+                          read=dict(tol=tol, K=K, modes=modes), T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         E = _signal_factor(self._walker_phases(P, waveform), P["voxel"])
         S = (P["pathway"] * P["ew"][:, None] * E).sum(0) / P["norm"]
         return planned(S if complex_signal else np.abs(S), P["plan"])
 
     def walker_signals(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None,
-                       b1_scale=None, off_resonance_T=None, tol=PLAN_TOL, K=None, modes=None):
+                       b1_scale=None, off_resonance_T=None, tol=PLAN_TOL, K=None, modes=None,
+                       T2_b=None, T1_b=None, delta_omega_b=None):
         """The replay **before the ensemble mean**: ``(w, ew, E)`` with ``w`` the walkers' statistical weights
         ``(n_w,)``, ``ew`` those weights with the relaxation and surface terms applied, and ``E`` the complex
         signal factor of every walker at every measurement, ``(n_w, n_meas)``.
@@ -1008,26 +1020,28 @@ class ReplayPack:
         read's :class:`~dmipy_replay.replay.planning.ReadPlan`. With ``b1_scale`` (a scalar or per walker) or
         ``off_resonance_T`` (a scalar or per walker) given, ``E`` comes from the RF-aware route
         (:meth:`replay_bloch`): the transverse magnetisation of each walker at the readout, with the relaxation
-        the route applied itself, so ``ew`` is then ``w``.
+        the route applied itself, so ``ew`` is then ``w``. A pack's bound pool is read as :meth:`replay` reads it
+        (``T2_b``, ``T1_b``); ``delta_omega_b`` is the RF-aware route's.
         """
         waveform = waveform.waveform if hasattr(waveform, "waveform") else waveform
         view = self._at_tissue(tissue)
         if view is not self:
             return view.walker_signals(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
                                        compartment=compartment, b1_scale=b1_scale, off_resonance_T=off_resonance_T,
-                                       tol=tol, K=K, modes=modes)
+                                       tol=tol, K=K, modes=modes, T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         if b1_scale is None and off_resonance_T is None:
             P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
-                              read=dict(tol=tol, K=K, modes=modes))
+                              read=dict(tol=tol, K=K, modes=modes), T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
             w = np.asarray(self.spin_weights, np.float64)
             return w, P["pathway"] * P["ew"], planned(_signal_factor(self._walker_phases(P, waveform), P["voxel"]), P["plan"])
         E = self.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner,
-                              orientation=orientation, compartment=compartment, complex_signal=True, per_walker=True)
+                              orientation=orientation, compartment=compartment, complex_signal=True, per_walker=True,
+                              T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         w = np.asarray(self.spin_weights, np.float64)
         return w, w, planned(E, self._full_plan("the vector-Bloch route reads every band and mode"))
 
     def walker_phases(self, waveform, *, tissue=None, scanner=None, orientation=None, compartment=None,
-                      weights=None, tol=PLAN_TOL, K=None, modes=None):
+                      weights=None, tol=PLAN_TOL, K=None, modes=None, T2_b=None, T1_b=None):
         """:meth:`walker_signals` before the complex exponential: ``(w, ew, phi)`` with ``phi`` the accumulated
         phase of every walker at every measurement, ``(n_w, n_meas)`` real, so that ``E = exp(1j * phi)``. A
         consumer that reduces many walkers over its own groups (an image: the walkers of each voxel) takes the
@@ -1041,9 +1055,11 @@ class ReplayPack:
         view = self._at_tissue(tissue)
         if view is not self:
             return view.walker_phases(waveform, tissue=tissue, scanner=scanner, orientation=orientation,
-                                      compartment=compartment, weights=weights, tol=tol, K=K, modes=modes)
+                                      compartment=compartment, weights=weights, tol=tol, K=K, modes=modes,
+                                      T2_b=T2_b, T1_b=T1_b)
         read = dict(tol=tol, K=K, modes=modes) if weights is None else dict(tol=None, K=None, modes=None)   # a caller's weights are on every band
-        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, read=read)
+        P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, read=read,
+                          T2_b=T2_b, T1_b=T1_b)
         if np.any(P["voxel"] != 1.0):
             raise ValueError(
                 "this encoding leaves a net moment at the readout, so the voxel's extent multiplies the signal by "
@@ -1117,7 +1133,7 @@ class ReplayPack:
 
     def replay_bloch(self, waveform, *, b1_scale=None, off_resonance_T=None, tissue=None, scanner=None,
                      orientation=None, compartment=None, complex_signal=False, per_walker=False,
-                     crusher_seed=0, backend="numpy"):
+                     crusher_seed=0, backend="numpy", T2_b=None, T1_b=None, delta_omega_b=None):
         """The RF-aware replay: each walker's magnetisation vector propagated through the actual sequence
         operators on this pack's walk (:func:`~dmipy_replay.replay.bloch.replay_bloch`).
 
@@ -1148,15 +1164,22 @@ class ReplayPack:
 
         ``backend`` names the propagator, one of :attr:`BLOCH_BACKENDS`: ``"numpy"``, the reference and the default, or
         ``"jax"`` (the ``jax`` extra) where it is stated; both take the same arguments.
+
+        Each piece of the walk (the block grid cut at every RF instant) reads the exact occupancy runs of its own
+        interval (RPK.md 9.5.7): a walker that changes pool inside a block spends each side of the change in its pool,
+        and a block that a pulse splits is split at the pulse. A pack that carries the ``bound`` column
+        (RPK.md 5.3, 6.5) is read with the joint occupancy and needs the bound pool's ``T2_b``, ``T1_b`` (s) and
+        ``delta_omega_b`` (rad/s, its offset from the free pools), all required and without a default; a pack without
+        the column refuses all three.
         """
         view = self._at_tissue(tissue)
         if view is not self:
-            return view.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, complex_signal=complex_signal, per_walker=per_walker, crusher_seed=crusher_seed, backend=backend)
+            return view.replay_bloch(waveform, b1_scale=b1_scale, off_resonance_T=off_resonance_T, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment, complex_signal=complex_signal, per_walker=per_walker, crusher_seed=crusher_seed, backend=backend, T2_b=T2_b, T1_b=T1_b, delta_omega_b=delta_omega_b)
         if backend not in self.BLOCH_BACKENDS:
             raise ValueError(f"backend={backend!r}: this pack's propagators are {sorted(self.BLOCH_BACKENDS)}")
         _rb = self.BLOCH_BACKENDS[backend]()
         from .bloch import _bloch_timeline
-        from .compression import occupancy_at, local_time_at, positions_at
+        from .compression import occupancy_pieces, local_time_at, positions_at
         from ._replay_kernel import gate_weights
         P = self._prepare(waveform, tissue=tissue, scanner=scanner, orientation=orientation, compartment=compartment,
                           relaxation=False, surface=False, pathway=False)
@@ -1176,8 +1199,9 @@ class ReplayPack:
         if per_walker and not single:
             raise ValueError("per_walker reads each walker at the readout of a single-echo sequence")
         T2v, T1v = P["T2"], P["T1"]
+        bcol = self._bound_pool(ch, T2_b, T1_b, delta_omega_b, bloch=True, reads_relaxation=True)
         relax = None
-        if T2v is not None or T1v is not None:
+        if T2v is not None or T1v is not None or bcol is not None:
             col = next(d for d in ch["compartment"]["columns"] if d["name"] == "comp")
             n_ids = 2 if col["kind"] == "fraction" else self._n_pool_ids(col)   # a fractional occupancy is two pools
 
@@ -1189,7 +1213,7 @@ class ReplayPack:
                 if len(out) < n_ids:
                     raise ValueError(f"the compartment channel addresses pool id {n_ids - 1} and the embedded spec "
                                      f"declares {len(out)} pools: the pack is inconsistent")
-                return out
+                return out[:n_ids]                                      # the spec may name more pools than the channel labels
             relax = dict(T2_per_comp=per_pool(T2v, "T2"), T1_per_comp=per_pool(T1v, "T1"))
         if P["rho1"] is not None and float(P["rho1"]) != 0.0:
             # the vector-Bloch route propagates the actual M = (Mx, My, Mz) through the real pulses, so Mxy and
@@ -1257,7 +1281,14 @@ class ReplayPack:
             if b1_scale is not None:
                 kw["b1_scale"] = b1_scale
             if relax is not None:
-                kw.update(comp_traj=occupancy_at(seg.arrays, col, t0 + np.arange(n_s) * dt), **relax)
+                # each piece reads the exact occupancy runs of its own interval (RPK.md 9.5.7), the pieces the
+                # propagator will cut: the block grid and every RF instant
+                edges = _bloch_timeline(rf, n_s, dt, t0=t0)[0]
+                f_comp, f_bound = occupancy_pieces(seg.arrays, col, edges, n_ids, bound_column=bcol)
+                kw.update(comp_traj=f_comp, **relax)
+                if bcol is not None:
+                    kw.update(bound_frac=f_bound, T2_bound=float(T2_b), T1_bound=float(T1_b),
+                              off_resonance_bound=float(delta_omega_b) / (2.0 * np.pi))
             if surface is not None:
                 meta = dict(ch.get("boundary_local_time") or {})
                 meta.setdefault("K", _cx_bands_K(seg.arrays, meta))
@@ -1392,7 +1423,7 @@ class ReplayPack:
                                chi_aniso=P["chi_aniso"], has_aniso=_has_aniso(gm, pm.get("channels")))
 
     def _prepare(self, waveform, *, tissue, scanner, orientation, compartment, relaxation=True, surface=True,
-                 pathway=True, read=None, any_field=False):
+                 pathway=True, read=None, any_field=False, T2_b=None, T1_b=None, delta_omega_b=None):
         """Everything a replay resolves before it reads the bands: the waveform (its physical and its effective gradient,
         rotated into the substrate frame when a pose is given), the tissue's values (none for ``None``), the susceptibility
         term :func:`field_term` resolves from the pack's declared field, the tissue's chi and the scanner's B0 (``B0``
@@ -1467,6 +1498,9 @@ class ReplayPack:
         # the gates' running integrals, what the occupancy's runs between events are weighed by (no grid, RPK.md 9.5.7)
         gate_cum = (CumulativeGate(chi_wf, dt_wf), CumulativeGate(np.ones(chi_wf.shape[0]), dt_wf))
         logw = np.zeros(n_w)
+        if relaxation:
+            bcol = self._bound_pool(ch, T2_b, T1_b, delta_omega_b, bloch=False,
+                                    reads_relaxation=T2 is not None or T1 is not None)
         if (T2 is not None or T1 is not None) and relaxation:
             if not self.has_relaxation:
                 raise ValueError("T2 / T1 were given but the pack carries no compartment channel (C1); build it "
@@ -1485,7 +1519,8 @@ class ReplayPack:
                 raise ValueError(f"the compartment channel addresses pool id {n_ids - 1} and the embedded spec "
                                  f"declares {min(len(T2v), len(T1v))} pools: the pack is inconsistent")
             for seg, t0, T_s in windows:                                   # on the runs between events, never a track
-                logw = logw + relaxation_logweight_runs(seg.arrays, col, T2v, T1v, gate_cum[0], gate_cum[1], t0=t0, t1=t0 + T_s)
+                logw = logw + relaxation_logweight_runs(seg.arrays, col, T2v, T1v, gate_cum[0], gate_cum[1], t0=t0, t1=t0 + T_s,
+                                                        bound_column=bcol, T2_b=T2_b, T1_b=T1_b)
         if rho2 is not None and float(rho2) != 0.0 and surface:
             D_walk = self.diffusivity if D is None else D
             if D_walk is None:
@@ -1522,6 +1557,26 @@ class ReplayPack:
                     pathway=(pathway_weight(waveform) if pathway else 1.0), voxel=voxel,
                     b0_dir=b0_dir, chi_iso=chi_iso, chi_aniso=chi_aniso, T2=T2, T1=T1, rho2=rho2, rho1=rho1, D=D,
                     G_eff_wf=G_eff, windows=windows, gate_wf=gate_wf, gate_cum=gate_cum, plan=plan, K_use=K_use, M_use=M_use)
+
+    @staticmethod
+    def _bound_pool(ch, T2_b, T1_b, delta_omega_b, *, bloch, reads_relaxation):
+        """The pack's C1 ``bound`` column (``None`` when it carries none), after holding the bound pool's replay knobs
+        to what the pack and the route need: ``T2_b`` and ``T1_b`` with any relaxation or Bloch read of a pack that
+        carries the column, ``delta_omega_b`` with the Bloch route alone, and none of the three without the column
+        (RPK.md 5.3, 6.5, 8.8)."""
+        cols = (ch.get("compartment") or {}).get("columns") or []
+        col = next((d for d in cols if d["name"] == "bound"), None)
+        if col is None:
+            if T2_b is not None or T1_b is not None or delta_omega_b is not None:
+                raise ValueError("this pack carries no bound column: T2_b, T1_b and delta_omega_b are not read")
+            return None
+        if delta_omega_b is not None and not bloch:
+            raise ValueError("delta_omega_b is read by replay_bloch only")
+        if bloch and delta_omega_b is None:
+            raise ValueError("a pack carrying the bound column needs delta_omega_b for replay_bloch (RPK.md 6.5)")
+        if (bloch or reads_relaxation) and (T2_b is None or T1_b is None):
+            raise ValueError("a pack carrying the bound column needs T2_b and T1_b for a relaxation read (RPK.md 5.3, 8.8)")
+        return col if (bloch or reads_relaxation) else None
 
     def _n_pool_ids(self, col):
         """How many pool ids the ``comp`` column addresses, read over every window."""

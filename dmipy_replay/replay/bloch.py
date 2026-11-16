@@ -138,8 +138,10 @@ def _bloch_replay_terms(trajectory, h, G, dt_wf, rf_events, *, T2, T1, comp_traj
     hard pulse is one rotation at its instant; a finite pulse of ``duration_s`` is ``round(duration/dt)``
     sub-rotations spread over its window with the flip split evenly (or by its envelope); its carrier
     ``offset_hz`` and, with ``slice_offsets``/``slice_gradient``, the slice-select off-resonance act over the
-    window (a hard pulse has no window). An MT ``bound_frac`` blends the relaxation rates toward the bound
-    pool's per block end and adds the bound pool's off-resonance precession by occupancy.
+    window (a hard pulse has no window). The pool occupancies are the pieces' own, ``comp_traj`` ``(n_w, n_p, n_pools)``
+    and ``bound_frac`` ``(n_w, n_p)``: each the average over the piece of its pool's occupancy, so the rate over a piece is
+    the sum over the pools of occupancy times rate (RPK.md 5.3, 9.5.7); an MT ``bound_frac`` adds the bound pool's
+    relaxation and its off-resonance precession by occupancy.
     """
     G = np.asarray(G, np.float64)
     n_w, n_t, _ = trajectory.shape
@@ -151,17 +153,41 @@ def _bloch_replay_terms(trajectory, h, G, dt_wf, rf_events, *, T2, T1, comp_traj
     ell = np.diff(edges)                                                      # (n_p,) piece durations
     frac = ell / dt
 
-    def rate(per_comp, scalar):
+    def occupancy(name, arr, ndim):
+        a = np.asarray(arr, np.float64)
+        if a.ndim != ndim or a.shape[:2] != (n_w, n_p):
+            raise ValueError(f"{name} is the occupancy of every walker over each PIECE of the walk (the block grid cut at "
+                             f"every RF instant): shape ({n_w}, {n_p}{', n_pools' if ndim == 3 else ''}); got {a.shape}")
+        return a
+    bf = None
+    if bound_frac is not None:
+        if T2_bound is None or T1_bound is None:
+            raise ValueError("T2_bound and T1_bound are required when bound_frac is set.")
+        bf = occupancy("bound_frac", bound_frac, 2).T                          # (n_p, n_w)
+
+    def rate(per_comp, scalar, bound_T):
+        """Per piece, the rate of the pool occupancies: ``sum_g f_g / T_g`` over ``comp_traj`` (the geometric pools'
+        occupancies, the bound occupancy already taken out of them) plus ``f_bound / T_bound``."""
         if per_comp is not None:
             if comp_traj is None:
                 raise ValueError("comp_traj is required with per-compartment relaxation.")
-            return (1.0 / np.asarray(per_comp, np.float64))[np.asarray(comp_traj)].T    # (n_t, n_w)
-        return np.full((n_t, 1), 0.0 if scalar is None else 1.0 / float(scalar))
-    invT2 = rate(T2_per_comp, T2)
-    invT1 = rate(T1_per_comp, T1)
-    # a block end's occupancy, contact and bound fraction are accumulated over the step ENDING at it, so the piece in
-    # block [t_k, t_{k+1}] reads them at k + 1; a sampled quantity (a field at the block ends) is read through
-    # the path interpolant with the piece's unit moments (lo on block end k, hi on block end k + 1)
+            f = occupancy("comp_traj", comp_traj, 3)
+            r = 1.0 / np.asarray(per_comp, np.float64)
+            if f.shape[2] != r.size:
+                raise ValueError(f"comp_traj holds {f.shape[2]} pools and the per-compartment times {r.size}")
+            out = np.tensordot(f, r, axes=([2], [0])).T                            # (n_p, n_w)
+        else:
+            out = np.full((n_p, 1), 0.0 if scalar is None else 1.0 / float(scalar))
+            if bf is not None:
+                out = (1.0 - bf) * out
+        if bf is not None:
+            out = out + bf * (1.0 / float(bound_T))
+        return out
+    invT2 = rate(T2_per_comp, T2, T2_bound)
+    invT1 = rate(T1_per_comp, T1, T1_bound)
+    # the occupancy and the bound fraction are the pieces' own: the average over each piece of the pool occupancies
+    # (compression.occupancy_pieces); a sampled quantity (a field or the wall contact at the block ends) is read
+    # through the path interpolant with the piece's unit moments (lo on block end k, hi on block end k + 1)
     k1 = np.minimum(k + 1, n_t - 1)
     a_rel, b_rel = edges[:-1] - start - k * dt, edges[1:] - start - k * dt
     u_hi = (b_rel ** 2 - a_rel ** 2) / (2.0 * dt)                            # int (t - t_k) dt / dt
@@ -172,16 +198,10 @@ def _bloch_replay_terms(trajectory, h, G, dt_wf, rf_events, *, T2, T1, comp_traj
         nonlocal dphi_extra
         dphi_extra = term if dphi_extra is None else dphi_extra + term
 
-    if bound_frac is not None:
-        if T2_bound is None or T1_bound is None:
-            raise ValueError("T2_bound and T1_bound are required when bound_frac is set.")
-        bf = np.asarray(bound_frac, np.float64).T                          # (n_t, n_w)
-        invT2 = (1.0 - bf) * invT2 + bf * (1.0 / float(T2_bound))
-        invT1 = (1.0 - bf) * invT1 + bf * (1.0 / float(T1_bound))
-        if float(off_resonance_bound) != 0.0:
-            add(bf[k1] * (2.0 * np.pi * float(off_resonance_bound) * ell)[:, None])
-    E2 = np.exp(-ell[:, None] * invT2[k1])                                    # (n_p, n_w | 1)
-    E1 = np.exp(-ell[:, None] * invT1[k1])
+    if bf is not None and float(off_resonance_bound) != 0.0:
+        add(bf * (2.0 * np.pi * float(off_resonance_bound) * ell)[:, None])
+    E2 = np.exp(-ell[:, None] * invT2)                                        # (n_p, n_w | 1)
+    E1 = np.exp(-ell[:, None] * invT1)
 
     if extra_phase_per_step is not None:
         x = np.asarray(extra_phase_per_step, np.float64).T / dt                  # (n_t, n_w): the sampled rate
@@ -263,10 +283,16 @@ def replay_bloch(trajectory, h, G, dt_wf, rf_events, *,
         ``duration_s``, ``offset_hz``); ``axis_deg`` is the B1 phase (0 = x, 90 = y); ``duration_s = 0`` is an
         instantaneous hard pulse at ``t_s`` (any instant, not a block end); ``offset_hz`` an off-resonance carrier
         over a finite pulse.
-    T2, T1 / T2_per_comp, T1_per_comp, comp_traj : as in :func:`replay`.
+    T2, T1 / T2_per_comp, T1_per_comp : per-pool times (:func:`~dmipy_replay.replay.replay.ReplayPack.replay`).
+    comp_traj : ``(n_w, n_p, n_pools)`` the occupancy of every geometric pool over each PIECE of the walk (the block grid
+        cut at every RF instant, :func:`_bloch_timeline`): the average over the piece of ``f_g = (1 - b) [comp = g]``
+        (``f_g = [comp = g]`` without a bound pool), the pool occupancies of a piece in which nothing changes being
+        one-hot. :func:`~dmipy_replay.replay.compression.occupancy_pieces` forms it from a pack's columns.
     extra_phase_per_step : ``(n_w, n_t)`` the off-resonance phase each walker accrues per block end (a field read
         along the walk, a uniform offset, a crusher's winding), integrated with the path interpolant.
-    bound_frac, T2_bound, T1_bound, off_resonance_bound : the MT bound-pool blend per block end.
+    bound_frac, T2_bound, T1_bound, off_resonance_bound : the MT bound pool: ``bound_frac`` ``(n_w, n_p)`` its occupancy
+        ``f_bound = b`` averaged over each piece, ``T2_bound`` / ``T1_bound`` (s) its relaxation times and
+        ``off_resonance_bound`` (Hz) its offset from the free pools.
     b1_scale : transmit (B1+) scale of every flip; per walker for an inhomogeneous field.
     slice_offsets, slice_gradient : slice-select off-resonance ``gamma G_slice z_w`` during finite pulses.
     weights : (n_w,) ensemble weights of the walker mean.

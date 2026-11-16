@@ -20,7 +20,11 @@ samples on a grid:
   * compartment occupancy (C1) -- named columns, piecewise constant per walker, stored EXACTLY IN TIME: one static
     label per walker, or the events ``(t, label)`` of every change (:func:`encode_events_occupancy`, RPK.md 9.5.7);
     relaxation is the sum over the runs between events of the rate times the gate's on-time, no grid
-    (:func:`relaxation_logweight_runs`). The MT bound pool is one of these columns, not a channel of its own.
+    (:func:`relaxation_logweight_runs`). The MT bound pool is one of these columns, not a channel of its own: the
+    client reads both ``comp`` and ``bound`` as one joint occupancy (RPK.md 5.3, ``f_bound = b``, ``f_g = (1 - b)
+    [comp = g]``) in the scalar relaxation routes (``replay``, ``walker_signals``, the study route) and in the vector-Bloch
+    route, where it is read as the average over each piece of the walk (:func:`occupancy_pieces`); the bound pool's
+    ``T2_b``, ``T1_b`` (and, in the Bloch route, ``delta_omega_b``) are explicit replay knobs.
 
 The integer band containers (:func:`quantise_bands`, :func:`derive_container`) are a choice of bytes, not of meaning.
 """
@@ -537,7 +541,9 @@ def decode_occupancy(arrays, meta):
 
 def occupancy_at(arrays, column, times):
     """The labels of every walker at each of ``times`` (s, on the walk's clock), ``(N_w, len(times))``: a column
-    evaluated on a reader's instants (the dense oracle, the Bloch route's per-block reading) -- never a stored form."""
+    READ AT INSTANTS (the dense oracle) -- never a stored form, and never the occupancy over an interval, which is
+    :func:`occupancy_pieces` (RPK.md 9.5.7: the integral of a rate over an interval is the sum of each label's rate
+    times its overlap with the interval)."""
     from .events import events_at_instants
     start, ev = occupancy_events(arrays, column)
     return events_at_instants(ev, start, times)
@@ -801,17 +807,77 @@ def _occupancy_runs(arrays, column):
     return _decoded_once(arrays, "occupancy_runs", (column["name"], column["kind"]), (f"{column['name']}_",), decode)
 
 
-def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, active, *, t0=0.0, t1):
+def _entries(arrays, column):
+    """A column's runs as entries ``(walker, t, label)`` sorted by walker then time, with each walker's first entry (the
+    label held from the window's start) at ``t = -inf``."""
+    runs = _occupancy_runs(arrays, column)
+    if column["kind"] == "static":
+        return np.arange(runs.shape[0]), np.full(runs.shape[0], -np.inf), runs
+    off, t, lab, w = runs
+    t = np.array(t, copy=True)
+    t[off[:-1]] = -np.inf
+    return w, t, lab
+
+
+def _joint_runs(arrays, comp_column, bound_column):
+    """The runs of the JOINT occupancy of two columns: every instant at which either changes, per walker, with both
+    labels held from it -- ``(walker, t, comp, bound)`` sorted by walker then time; a walker's entries before both
+    columns have been stated (their heads, at ``t = -inf``) hold no time. Decoded once per pair of columns of a pack's
+    ``arrays`` (:func:`_decoded_once`) and returned read-only."""
+    def decode():
+        wc, tc, lc = _entries(arrays, comp_column)
+        wb, tb, lb = _entries(arrays, bound_column)
+        w = np.concatenate([wc, wb]); t = np.concatenate([tc, tb]); lab = np.concatenate([lc, lb])
+        is_bound = np.concatenate([np.zeros(wc.size, bool), np.ones(wb.size, bool)])
+        order = np.lexsort((is_bound, t, w))
+        w, t, lab, is_bound = w[order], t[order], lab[order], is_bound[order]
+        idx = np.arange(w.size)
+        new = np.r_[True, w[1:] != w[:-1]]
+        first = np.flatnonzero(new)[np.cumsum(new) - 1]                  # the walker's first entry, per entry
+
+        def held(mask):
+            last = np.maximum.accumulate(np.where(mask, idx, first - 0.5))   # the latest entry of the column, in this walker
+            ok = last >= first
+            return np.where(ok, lab[np.where(ok, last, 0).astype(np.int64)], 0)
+        return w, t, held(~is_bound), held(is_bound)
+    return _decoded_once(arrays, "joint_runs", (comp_column["name"], comp_column["kind"], bound_column["name"],
+                                                bound_column["kind"]),
+                         (f"{comp_column['name']}_", f"{bound_column['name']}_"), decode)
+
+
+def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, active, *, t0=0.0, t1,
+                              bound_column=None, T2_b=None, T1_b=None):
     """The per-walker relaxation log-weight over the window ``[t0, t1]`` from a C1 column's stored form, exact in time
     (RPK.md 9.5.7): a static column is one run per walker, an events column a run per entry from its instant to the
     next entry's (the last to ``t1``), and the log-weight is ``-sum_runs (r2(label) [chi(t_b) - chi(t_a)] +
     r1(label) [lon(t_b) - lon(t_a)])`` with ``chi`` the transverse gate's running integral (:class:`CumulativeGate`)
     and ``lon = active - chi`` the longitudinal periods' (``active`` the acquisition's own extent: a stored period of
     a stimulated echo relaxes at T1, the walk beyond the echo relaxes at nothing). O(events), one run per walker
-    when nothing crosses; no grid, no ``dt``."""
+    when nothing crosses; no grid, no ``dt``.
+
+    With ``bound_column`` (the C1 ``bound`` occupancy, RPK.md 5.3) the runs are those of the joint occupancy -- an entry
+    at every instant either column changes -- and the rate of a run with bound occupancy ``b`` and geometric label ``g``
+    is ``(1 - b) r(g) + b r_b``, the pool occupancies ``f_g = (1 - b) [comp = g]`` and ``f_bound = b`` weighting the
+    per-pool rates; ``T2_b`` and ``T1_b`` (s; ``inf`` for no decay) are the bound pool's times, required with the
+    column."""
     name = column["name"]
     invT2, invT1 = _rates(T2_per_comp), _rates(T1_per_comp)
     lon = lambda t: active(t) - chi(t)
+    if bound_column is not None:
+        if T2_b is None or T1_b is None:
+            raise ValueError("the bound column's runs need T2_b and T1_b")
+        rb2, rb1 = float(_rates([T2_b])[0]), float(_rates([T1_b])[0])
+        w, t, g, b = _joint_runs(arrays, column, bound_column)
+        n_w = int(w[-1]) + 1 if w.size else 0
+        last = np.r_[w[1:] != w[:-1], True]
+        t_a = np.maximum(t, float(t0))
+        t_b = np.empty_like(t); t_b[:-1] = t[1:]
+        t_b = np.where(last, float(t1), np.minimum(t_b, float(t1)))
+        t_b = np.maximum(t_b, t_a)
+        r2 = (1.0 - b) * invT2[g] + b * rb2
+        r1 = (1.0 - b) * invT1[g] + b * rb1
+        per = r2 * (chi(t_b) - chi(t_a)) + r1 * (lon(t_b) - lon(t_a))
+        return -np.bincount(w, weights=per, minlength=n_w)
     if column["kind"] == "static":
         lab = _occupancy_runs(arrays, column)
         on = float(chi(t1) - chi(t0)); off = float(lon(t1) - lon(t0))
@@ -826,6 +892,92 @@ def relaxation_logweight_runs(arrays, column, T2_per_comp, T1_per_comp, chi, act
     t_b = np.minimum(t_b, float(t1))
     per = invT2[lab] * (chi(t_b) - chi(t_a)) + invT1[lab] * (lon(t_b) - lon(t_a))
     return -np.bincount(w, weights=per, minlength=n_w)
+
+
+def occupancy_pieces(arrays, comp_column, edges, n_comp, bound_column=None):
+    """The pool occupancies of every walker over each piece ``[edges[i], edges[i + 1]]`` of a walk cut at ``edges`` (s,
+    ascending; repeated edges are empty pieces), exact in time (RPK.md 5.3, 9.5.7): ``(f_comp, f_bound)``, ``f_comp``
+    ``(N_w, n_pieces, n_comp)`` and ``f_bound`` ``(N_w, n_pieces)`` (``None`` without ``bound_column``).
+
+    With the bound occupancy ``b`` and the geometric label ``g`` the pool occupancies at an instant are ``f_bound = b``
+    and ``f_g = (1 - b) [comp = g]`` (they sum to 1); a piece's occupancy of a pool is the average over the piece of
+    that pool's occupancy, the sum over the runs of the joint occupancy of ``overlap(run, piece) f_c(run) / length`` --
+    the average of the product ``(1 - b) [comp = g]``, never the product of two averages. A piece in which no event
+    falls STRICTLY inside holds one run and its occupancy is the label itself, one-hot (and ``f_bound`` 0 or 1): no
+    quotient of overlap and length is formed for it. ``comp`` labels at or beyond ``n_comp`` are refused, and a
+    ``bound`` label that is not 0 or 1."""
+    from .events import events_at_instants
+    edges = np.asarray(edges, np.float64).reshape(-1)
+    a, b_end = edges[:-1], edges[1:]
+    n_p = a.size
+    cstart, cev = occupancy_events(arrays, comp_column)
+    comp = events_at_instants(cev, cstart, a)                                   # (N_w, n_p) label held at each piece's start
+    n_w = comp.shape[0]
+    evs = [(0, cev)]
+    bnd = None
+    if bound_column is not None:
+        bstart, bev = occupancy_events(arrays, bound_column)
+        bnd = events_at_instants(bev, bstart, a)
+        evs.append((1, bev))
+        labs = [np.asarray(bstart)] + ([np.asarray(bev.label)] if bev is not None else [])
+        if any(np.any((x != 0) & (x != 1)) for x in labs):
+            raise ValueError("the bound column's occupancy is 0 or 1 (RPK.md 5.3)")
+    labs = [np.asarray(cstart)] + ([np.asarray(cev.label)] if cev is not None else [])
+    if any(np.any((x < 0) | (x >= n_comp)) for x in labs):
+        raise ValueError(f"the comp column holds a label outside the {n_comp} pools addressed")
+    f_comp = np.zeros((n_w, n_p, n_comp))
+    np.put_along_axis(f_comp, comp[:, :, None].astype(np.int64), 1.0, axis=2)
+    f_bound = None
+    if bnd is not None:
+        f_bound = bnd.astype(np.float64)
+        f_comp *= (1.0 - f_bound)[:, :, None]
+    # the events strictly inside a piece, of either column
+    ew, ei, et, ec, el = [], [], [], [], []
+    for col, ev in evs:
+        if ev is None or ev.n_events == 0:
+            continue
+        w = np.repeat(np.arange(n_w), ev.counts)
+        i = np.searchsorted(edges, ev.t, side="left") - 1                       # edges[i] < t <= edges[i + 1]
+        ok = (i >= 0) & (i < n_p)
+        ok[ok] = ev.t[ok] < b_end[i[ok]]
+        ew.append(w[ok]); ei.append(i[ok]); et.append(ev.t[ok]); ec.append(np.full(ok.sum(), col)); el.append(ev.label[ok])
+    if not ew or sum(x.size for x in ew) == 0:
+        return f_comp, f_bound
+    ew, ei, et, ec, el = (np.concatenate(x) for x in (ew, ei, et, ec, el))
+    order = np.lexsort((ec, et, ew * n_p + ei))
+    ew, ei, et, ec, el = ew[order], ei[order], et[order], ec[order], el[order]
+    key = ew * n_p + ei
+    m = key.size
+    idx = np.arange(m)
+    new = np.r_[True, key[1:] != key[:-1]]
+    gid = np.cumsum(new) - 1
+    first = np.flatnonzero(new)[gid]                                            # first event of the event's piece
+    nxt_in = np.r_[key[1:] == key[:-1], False]                                  # a later event in the same piece
+    comp0 = comp[ew, ei]
+    bnd0 = np.zeros(m) if bnd is None else bnd[ew, ei].astype(np.float64)
+
+    def held(mask, init):
+        last = np.maximum.accumulate(np.where(mask, idx, first - 0.5))
+        ok = last >= first
+        return np.where(ok, el[np.where(ok, last, 0).astype(np.int64)], init)
+    comp_after = held(ec == 0, comp0).astype(np.int64)
+    bnd_after = held(ec == 1, bnd0).astype(np.float64)
+    end = np.where(nxt_in, np.r_[et[1:], 0.0], b_end[ei])                        # each event's run ends at the next event or the piece's end
+    n_pair = int(gid[-1]) + 1
+    acc = np.zeros((n_pair, n_comp + 1))
+    pf = np.flatnonzero(new)
+    # the run before each piece's first event: the label held at the piece's start, from its start
+    dur0 = et[pf] - a[ei[pf]]
+    np.add.at(acc, (np.arange(n_pair), comp0[pf]), (1.0 - bnd0[pf]) * dur0)
+    np.add.at(acc[:, n_comp], np.arange(n_pair), bnd0[pf] * dur0)
+    dur = end - et
+    np.add.at(acc, (gid, comp_after), (1.0 - bnd_after) * dur)
+    np.add.at(acc[:, n_comp], gid, bnd_after * dur)
+    acc /= (b_end[ei[pf]] - a[ei[pf]])[:, None]
+    f_comp[ew[pf], ei[pf], :] = acc[:, :n_comp]
+    if f_bound is not None:
+        f_bound[ew[pf], ei[pf]] = acc[:, n_comp]
+    return f_comp, f_bound
 
 
 def surface_logweight_bridge(arrays, meta, rho2_over_D, gate=None, dt_gate=None, *, t0=0.0):
