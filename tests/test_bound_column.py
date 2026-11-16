@@ -437,10 +437,6 @@ def test_bound_pool_parameters_given_to_a_read_that_does_not_use_them_are_refuse
 
 def test_routes_without_the_bound_pool_refuse_a_bound_pack_by_name(bound_pack, spin_echo):
     pack, _ = bound_pack
-    with pytest.raises(ValueError, match="pose_responses does not read the bound pool"):
-        pack.pose_response(spin_echo, tissue=TISSUE)
-    with pytest.raises(ValueError, match="pose_series does not read the bound pool"):
-        pack.pose_series([spin_echo], tissue=TISSUE)
     study = dr.Study(dr.StudyProtocol([dr.Acquisition(spin_echo)]), tissues=[TISSUE])
     with pytest.raises(ValueError, match="study does not read the bound pool"):
         pack.study(study)
@@ -448,6 +444,15 @@ def test_routes_without_the_bound_pool_refuse_a_bound_pack_by_name(bound_pack, s
     with pytest.raises(ValueError, match="image_study does not read the bound pool"):
         prim.refuse_bound_pool([TISSUE], "image_study")
     prim.refuse_bound_pool([None, Tissue()], "image_study")        # nothing relaxes: nothing to refuse
+
+
+def test_the_pose_routes_refuse_a_bound_pack_by_name(bound_pack, spin_echo):
+    pytest.importorskip("threadpoolctl")                           # the pose extra
+    pack, _ = bound_pack
+    with pytest.raises(ValueError, match="pose_responses does not read the bound pool"):
+        pack.pose_response(spin_echo, tissue=TISSUE)
+    with pytest.raises(ValueError, match="pose_series does not read the bound pool"):
+        pack.pose_series([spin_echo], tissue=TISSUE)
     free = dr.read_rpk(DATA / "slab_exchange.rpk")
     free.pose_response(spin_echo, tissue=TISSUE)                   # a pack without the column is read as before
 
