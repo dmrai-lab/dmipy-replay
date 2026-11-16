@@ -24,7 +24,8 @@ def replay_bloch_jax(trajectory, h, G, dt_wf, rf_events, *,
                      t0=None, M_init=None, return_state=False):
     """:func:`~dmipy_replay.replay.bloch.replay_bloch` as a jitted ``lax.scan`` over the pieces of the walk, vectorised over measurements.
 
-    Same arguments, same per-piece operator and same outputs as the numpy reference. Arithmetic is float32 on
+    Same arguments (``comp_traj`` ``(n_w, n_pieces, n_pools)`` and ``bound_frac`` ``(n_w, n_pieces)`` the occupancies of each
+    piece, as in the reference), same per-piece operator and same outputs as the numpy reference. Arithmetic is float32 on
     the device, so signals agree with the reference to about 1e-5 of the phase scale. Each measurement needs
     an ``(n_pieces, n_w)`` float32 phase table on the device; measurements are batched so that the tables of one
     batch stay within ``phase_table_bytes``, and a single measurement whose table exceeds it runs alone.

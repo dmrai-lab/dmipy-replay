@@ -18,7 +18,9 @@ class Primitives:
     """What one acquisition leaves of every walker before any tissue or scanner is applied: ``w`` the weights,
     ``phi`` the gradient phase ``(n, m)``, ``field_iso`` / ``field_aniso`` the gated path integrals under the field
     direction ``(n,)`` (None without the path channel), ``exposure_t2`` / ``exposure_t1`` the transverse and
-    longitudinal time per pool ``(n, n_pools)`` (None without the compartment channel), ``contact`` / ``contact_t1``
+    longitudinal time per pool ``(n, n_pools)`` (None without the compartment channel; with ``has_bound``, the pack's
+    ``bound`` column, the LAST column is the bound pool's, the others the free pools' under the joint occupancy,
+    RPK.md 5.3), ``contact`` / ``contact_t1``
     the boundary local time gated by the coherence and by its complement (on while stored along B0, e.g. a
     stimulated echo's mixing time) ``(n,)`` (None without the contact channel), ``D_walk`` the walk's diffusivity, and
     ``pathway`` the amplitude of the coherence pathway the acquisition's readout is
@@ -47,6 +49,7 @@ class Primitives:
     field_envelope: Optional[dict] = None                       # the field tier's {B0_max, B0_chi_max} (ReplayPack.field_envelope), None unbounded
     contact_t1: Optional[np.ndarray] = None                    # the SAME channel, gated by chi_parallel = active - chi (dmipy-sim#574)
     plan: object = None                                        # the ReadPlan of the bands and modes contracted (None: unplanned)
+    has_bound: bool = False                                    # the last exposure column is the bound pool's (the pack carries the bound column)
 
     def __post_init__(self):
         if self.voxel is None:
@@ -60,27 +63,35 @@ class Primitives:
     def n_pools(self):
         return None if self.exposure_t2 is None else int(self.exposure_t2.shape[1])
 
-    def rates(self, tissue):
+    def rates(self, tissue, *, T2_b=None, T1_b=None):
         """``(invT2, invT1, rho2_over_D, rho1_over_D)`` of a tissue on this pack's pools: per-pool rates (0 where the
         tissue declares no time, or ``inf``) and the two contact rates (0 without a relaxivity). A per-pool value
-        is judged complete on the pack's spec, not on the pools this chunk of walkers labels."""
+        is judged complete on the pack's spec, not on the pools this chunk of walkers labels. With the bound pool
+        (``has_bound``) the rates are one longer, the last the bound pool's ``1 / T2_b``, ``1 / T1_b``, both times
+        required with a tissue that relaxes and refused without the column (RPK.md 5.3, 8.8)."""
         t = tissue
         n = self.n_pools or 1
+        n_free = n - 1 if self.has_bound else n
+        if not self.has_bound and (T2_b is not None or T1_b is not None):
+            raise ValueError("this pack carries no bound column: T2_b, T1_b and delta_omega_b are not read")
+        if (T2_b is not None or T1_b is not None) and not (t is not None and (t.T2 is not None or t.T1 is not None)):
+            raise ValueError("T2_b and T1_b are read with a tissue that declares a T2 or T1, and this read has none")
         invT2 = np.zeros(n); invT1 = np.zeros(n); rho2_D = 0.0; rho1_D = 0.0
         if t is not None and (t.T2 is not None or t.T1 is not None):
             if self.exposure_t2 is None:
                 raise ValueError("T2 / T1 were given but the pack carries no compartment channel (C1)")
+            if self.has_bound:
+                if T2_b is None or T1_b is None:
+                    raise ValueError("a pack carrying the bound column needs T2_b and T1_b for a relaxation read (RPK.md 5.3, 8.8)")
+                invT2[n_free] = 1.0 / float(T2_b); invT1[n_free] = 1.0 / float(T1_b)
             for name, vals in (("T2", self.by_pool(t.T2, "T2")), ("T1", self.by_pool(t.T1, "T1"))):
                 if vals is None:
                     continue
-                if len(vals) < n:
-                    raise ValueError(f"the compartment channel addresses pool id {n - 1} and the embedded spec "
+                if len(vals) < n_free:
+                    raise ValueError(f"the compartment channel addresses pool id {n_free - 1} and the embedded spec "
                                      f"declares {len(vals)} pools: the pack is inconsistent")
-                rate = 1.0 / np.asarray(vals, float)[:n]           # the spec may name more pools than the channel labels (a dry sheath)
-                if name == "T2":
-                    invT2 = rate
-                else:
-                    invT1 = rate
+                rate = 1.0 / np.asarray(vals, float)[:n_free]      # the spec may name more pools than the channel labels (a dry sheath)
+                (invT2 if name == "T2" else invT1)[:n_free] = rate
         if t is not None and t.D is not None and self.D_walk is not None and float(t.D) != float(self.D_walk):
             raise ValueError(
                 f"the primitives were contracted on the walked grid, at D = {float(self.D_walk):.3g} m^2/s, and a "
@@ -111,6 +122,13 @@ class Primitives:
                                  f"{float(self.rho2_over_D_max):.4g} 1/m (replay_envelope.tissue.rho2_over_D_max)")
         return invT2, invT1, rho2_D, rho1_D
 
+    def refuse_bound_pool(self, tissues, route):
+        """Refuse by name a ``route`` that has no bound-pool parameters when these primitives carry the bound pool and any of
+        ``tissues`` declares a T2 or T1 (RPK.md 5.3, 8.8)."""
+        if self.has_bound and any(t is not None and (t.T2 is not None or t.T1 is not None) for t in tissues):
+            raise ValueError(f"{route} does not read the bound pool of a pack that carries the bound column (RPK.md 5.3, 8.8): "
+                             "replay, walker_signals, walker_phases and replay_bloch do")
+
     def field_scalars(self, tissue, scanner):
         """``(B0 chi_iso, B0 chi_aniso)`` for a pair as :func:`~dmipy_replay.replay.replay.field_term` resolves it on the
         pack's declared field, ``(0, 0)`` when that term is zero."""
@@ -123,7 +141,7 @@ class Primitives:
                              "them from a pack read with its field modes")
         return f.B0 * f.chi_iso, f.B0 * f.chi_aniso
 
-    def reduction_terms(self, tissue=None, scanner=None):
+    def reduction_terms(self, tissue=None, scanner=None, *, T2_b=None, T1_b=None):
         """Every term that turns these primitives into a signal, resolved once for a pair: ``invT2`` / ``invT1`` the
         per-pool rates, ``rho2_over_D`` / ``rho1_over_D`` the two contact rates, ``a_iso`` / ``a_aniso`` the field
         scalars, ``amplitude`` the readout's pathway weight and ``voxel`` the per-measurement voxel factor.
@@ -133,18 +151,19 @@ class Primitives:
         to the reduction once and reaches both. That device kernel had grown its own copy and left ``amplitude``
         out, which made a stimulated-echo study exactly ``1 / eta`` times the per-voxel ``walker_signals`` -- 2x
         for a 90/90/90 schedule (dmipy-sim#484)."""
-        invT2, invT1, rho2_D, rho1_D = self.rates(tissue)
+        invT2, invT1, rho2_D, rho1_D = self.rates(tissue, T2_b=T2_b, T1_b=T1_b)
         a_i, a_a = self.field_scalars(tissue, scanner)
         return dict(invT2=invT2, invT1=invT1, rho2_over_D=rho2_D, rho1_over_D=rho1_D, a_iso=a_i, a_aniso=a_a,
                     amplitude=float(self.pathway), voxel=self.voxel)
 
-    def signals(self, tissue=None, scanner=None):
+    def signals(self, tissue=None, scanner=None, *, T2_b=None, T1_b=None):
         """``(w, ew, E)`` as :meth:`ReplayPack.walker_signals` gives them for this acquisition under the pair --
         the same numbers, since ``phi`` came from :func:`~dmipy_replay.replay.replay._band_phase`, ``E`` from
         :func:`~dmipy_replay.replay.replay._signal_factor` and the rest from :meth:`reduction_terms`, which that route
-        and the columnar image read too."""
+        and the columnar image read too. ``T2_b`` and ``T1_b`` (s) are the bound pool's relaxation times of a pack that
+        carries the ``bound`` column: required with a tissue that relaxes, refused without the column."""
         from .replay import _signal_factor
-        t = self.reduction_terms(tissue, scanner)
+        t = self.reduction_terms(tissue, scanner, T2_b=T2_b, T1_b=T1_b)
         logw = np.zeros(len(self.w))
         if self.exposure_t2 is not None:
             logw = logw - self.exposure_t2 @ t["invT2"] - self.exposure_t1 @ t["invT1"]
@@ -157,7 +176,7 @@ class Primitives:
             phi = phi + (t["a_iso"] * self.field_iso + t["a_aniso"] * self.field_aniso)[:, None]
         return self.w, t["amplitude"] * self.w * np.exp(logw), _signal_factor(phi, t["voxel"])
 
-    def signal(self, tissue=None, scanner=None, *, complex_signal=False):
+    def signal(self, tissue=None, scanner=None, *, complex_signal=False, T2_b=None, T1_b=None):
         """The ensemble signal of this acquisition under the pair, ``(n_meas,)``: what
         :meth:`ReplayPack.replay` returns, magnitude unless ``complex_signal``.
 
@@ -165,6 +184,6 @@ class Primitives:
         signal: it drops the quadrature the ensemble carries, which for a substrate seeded or shaped
         asymmetrically is ``s^2 / 2c`` of the magnitude and grows with ``b`` (5.2e-4 at b = 13,190 s/mm^2 on the
         MC/DC parity fixture, against a codec error of 1.1e-4; dmipy-sim#484)."""
-        w, ew, E = self.signals(tissue, scanner)
+        w, ew, E = self.signals(tissue, scanner, T2_b=T2_b, T1_b=T1_b)
         S = (ew[:, None] * E).sum(0) / w.sum()
         return planned(S if complex_signal else np.abs(S), self.plan)

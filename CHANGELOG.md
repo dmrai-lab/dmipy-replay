@@ -5,8 +5,25 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- **A wall that binds states its bound pool's mean dwell** (`Wall.mt_dwell`, a `Dwell` of seconds per side;
-  dmrai-lab/dmrai#72). Stated exactly when a side's `mt_reactivity` is positive, positive on each side that binds and
+- **The `bound` column is read** (RPK.md 5.3, 6.5, 8.8). A pack that carries the C1 `bound` occupancy column is replayed with
+  the joint occupancy `f_bound = b`, `f_g = (1 - b) [comp = g]` and the rate `R(t) = sum_c f_c(t) R_c`, exact over the runs of
+  both columns, by `ReplayPack.replay`, `walker_signals`, `walker_phases`, the study route (`walker_primitives` holds one
+  extra exposure column for the bound pool; `Primitives.signals` applies its rates) and `replay_bloch`. The occupancy columns
+  the client reads are `comp` and `bound`. The bound pool's parameters are explicit keyword arguments: `T2_b` and `T1_b`
+  (seconds) of `replay`, `walker_signals`, `walker_phases`, `replay_bloch` and `Primitives.signals`, and `delta_omega_b`
+  (rad/s) of `replay_bloch` only, each required and refused by name on a pack that carries the column and refused on a
+  pack that does not; there is no default. A pack without the column reads exactly as before on the scalar routes.
+- **The Bloch route reads the exact occupancy runs of each piece** (RPK.md 9.5.7, 6.5). Each piece of the walk (the block
+  grid cut at every RF instant) takes the occupancy of its own interval, the sum over the runs of the overlap of the run
+  with the piece times the run's occupancy: a walker that changes pool inside a block spends each side of the change in its
+  pool, and a block that a pulse splits is split at the pulse. Before, the label at each block's end was applied to the
+  whole block. The propagators (`replay_bloch`, `replay_bloch_jax`) take `comp_traj` `(n_walkers, n_pieces, n_pools)` and
+  `bound_frac` `(n_walkers, n_pieces)`, each the average over the piece of its pool's occupancy
+  (`compression.occupancy_pieces`); the per-block-end spelling is removed. A walker with no occupancy event in the read
+  window `(0, TE]` reads as before, bit for bit; a walker with one changes. The longitudinal relaxation of the propagator is
+  unchanged.
+- **A wall that binds states its bound pool's mean dwell** (`Wall.mt_dwell`, a `Dwell` of seconds per side).
+  Stated exactly when a side's `mt_reactivity` is positive, positive on each side that binds and
   0 on each side that does not, refused by name otherwise; a time, so `SubstrateSpec.scaled` keeps it. A wall that
   binds nothing writes none: every existing spec reads and writes as it did.
 - **A time view at any diffusivity** (`ReplayPack.at_diffusivity`, `Tissue(D=)`, `Tissue(kappa=)`): a view at

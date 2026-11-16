@@ -88,9 +88,14 @@ def test_finite_shaped_pulses_with_carrier_slice_and_b1_scale():
 def test_mt_blend_susceptibility_surface_compartments_and_weights():
     traj, G = _walk(2), _gradient()
     rng = np.random.default_rng(2)
-    comp = (rng.uniform(size=(N_W, N_T)) < 0.4).astype(int)
+    # the occupancies of every piece of the walk (the 119 blocks; both pulses fall on block ends and cut nothing): the
+    # geometric label and the bound fraction held at each block's end, constant over the block, the bound occupancy taken
+    # out of the geometric pools' (RPK.md 5.3: f_bound = b, f_g = (1 - b) [comp = g])
+    label = (rng.uniform(size=(N_W, N_T)) < 0.4).astype(int)[:, 1:]
+    bound = rng.uniform(0, 0.3, (N_W, N_T))[:, 1:]
+    comp = np.eye(2)[label] * (1.0 - bound)[:, :, None]
     kw = dict(comp_traj=comp, T2_per_comp=[30e-3, 80e-3], T1_per_comp=[0.6, 1.2],
-              bound_frac=rng.uniform(0, 0.3, (N_W, N_T)), T2_bound=12e-6, T1_bound=1.0,
+              bound_frac=bound, T2_bound=12e-6, T1_bound=1.0,
               off_resonance_bound=250.0,
               extra_phase_per_step=rng.normal(scale=0.02, size=(N_W, N_T)),
               dlog_boundary_unit=-rng.exponential(2e-7, (N_W, N_T)), surface_relaxivity=5e-6, D=2e-9,
@@ -106,7 +111,7 @@ def test_both_engines_refuse_an_incomplete_mt_or_surface_spec():
     traj, G = _walk(), _gradient(1)
     for fn in (replay_bloch, replay_bloch_jax):
         with pytest.raises(ValueError, match="T2_bound"):
-            fn(traj, DT, G, DT, _rf(), bound_frac=np.zeros((N_W, N_T)))
+            fn(traj, DT, G, DT, _rf(), bound_frac=np.zeros((N_W, N_T - 1)))
         with pytest.raises(ValueError, match="D required"):
             fn(traj, DT, G, DT, _rf(), dlog_boundary_unit=np.zeros((N_W, N_T)), surface_relaxivity=1e-6)
         with pytest.raises(ValueError, match="comp_traj"):

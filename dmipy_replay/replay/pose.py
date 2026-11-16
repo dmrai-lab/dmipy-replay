@@ -154,7 +154,8 @@ def pose_responses(pack, waveforms, *, tissue=None, scanner=None, pose=None, com
                                     keep=(None if keep is None else [None if k is None else int(k) for k in keep]))):
         Ps, paths, out = [], [], [None] * len(waveforms)
         for c, wf in enumerate(waveforms):
-            P = pack._prepare(wf, tissue=tissue, scanner=scanner, orientation=None, compartment=compartment)
+            P = pack._prepare(wf, tissue=tissue, scanner=scanner, orientation=None, compartment=compartment,
+                              bound_route="pose_responses")
             if R_s is not None:
                 P["b0_dir"] = tuple(R_s.T @ np.array([0.0, 0.0, 1.0]))   # the bore's field, seen from the specimen
             path = None

@@ -133,13 +133,14 @@ def walker_primitives(pack, acquisition, *, tol=PLAN_TOL, K=None, modes=None):
     P = pack._prepare(acq.waveform, tissue=None, scanner=None, orientation=acq.orientation, compartment=None,
                       read=dict(tol=tol, K=K, modes=modes), any_field=True)
     n_w, ch = P["n_w"], P["ch"]
-    col = n_ids = None
+    col = bcol = n_ids = None
     if pack.has_relaxation:
         from dmipy_replay.replay.compression import is_current_c1, decode_occupancy
         if not is_current_c1(ch["compartment"]):
             decode_occupancy(pack.arrays, ch["compartment"])
         col = next(d for d in ch["compartment"]["columns"] if d["name"] == "comp")
         n_ids = pack._n_pool_ids(col)
+        bcol = next((d for d in ch["compartment"]["columns"] if d["name"] == "bound"), None)
         # exposure per pool: a unit rate in one pool and none (an infinite time) in the others
         unit = np.where(np.eye(n_ids) > 0, 1.0, np.inf); zero = [np.inf] * n_ids
     from dmipy_replay.replay.compression import has_c2
@@ -150,8 +151,18 @@ def walker_primitives(pack, acquisition, *, tol=PLAN_TOL, K=None, modes=None):
     for j, (seg, t0, T_s) in enumerate(P["windows"]):
         t1 = t0 + T_s
         if col is not None:
-            e2 = np.stack([-relaxation_logweight_runs(seg.arrays, col, unit[p].tolist(), zero, chi_c, act_c, t0=t0, t1=t1) for p in range(n_ids)], axis=1)
-            e1 = np.stack([-relaxation_logweight_runs(seg.arrays, col, zero, unit[p].tolist(), chi_c, act_c, t0=t0, t1=t1) for p in range(n_ids)], axis=1)
+            if bcol is None:
+                e2 = np.stack([-relaxation_logweight_runs(seg.arrays, col, unit[p].tolist(), zero, chi_c, act_c, t0=t0, t1=t1) for p in range(n_ids)], axis=1)
+                e1 = np.stack([-relaxation_logweight_runs(seg.arrays, col, zero, unit[p].tolist(), chi_c, act_c, t0=t0, t1=t1) for p in range(n_ids)], axis=1)
+            else:
+                # the joint occupancy's exposure of each free pool (f_g = (1 - b) [comp = g]) and, as the last column,
+                # of the bound pool (f_bound = b): a unit rate in one pool and none in the others
+                inf = np.inf
+                def expo(T2g, T1g, T2b, T1b):
+                    return -relaxation_logweight_runs(seg.arrays, col, T2g, T1g, chi_c, act_c, t0=t0, t1=t1,
+                                                      bound_column=bcol, T2_b=T2b, T1_b=T1b)
+                e2 = np.stack([expo(unit[p].tolist(), zero, inf, inf) for p in range(n_ids)] + [expo(zero, zero, 1.0, inf)], axis=1)
+                e1 = np.stack([expo(zero, unit[p].tolist(), inf, inf) for p in range(n_ids)] + [expo(zero, zero, inf, 1.0)], axis=1)
             exposure_t2 = e2 if exposure_t2 is None else exposure_t2 + e2
             exposure_t1 = e1 if exposure_t1 is None else exposure_t1 + e1
         if has_c2(seg.arrays):
@@ -172,7 +183,7 @@ def walker_primitives(pack, acquisition, *, tol=PLAN_TOL, K=None, modes=None):
         field_iso, aniso = field_terms(Psi, P["b0_dir"])
         field_aniso = aniso if _has_aniso(ch.get("susceptibility_grid"), names) else np.zeros(n_w)
     from dmipy_replay.acquisition.epg import pathway_weight
-    return Primitives(w=P["w"], phi=phi, field_iso=field_iso, field_aniso=field_aniso, exposure_t2=exposure_t2, exposure_t1=exposure_t1,
+    return Primitives(w=P["w"], phi=phi, field_iso=field_iso, field_aniso=field_aniso, exposure_t2=exposure_t2, exposure_t1=exposure_t1, has_bound=bcol is not None,
                       contact=contact, contact_t1=contact_t1, D_walk=pack.diffusivity, pathway=pathway_weight(acq.waveform),
                       rho2_over_D_max=pack.rho2_over_D_max, field_envelope=pack.field_envelope, voxel=P["voxel"], by_pool=pack._by_pool,
                       susceptibility_field=pack.susceptibility_field, plan=P["plan"])
@@ -185,6 +196,7 @@ def study_signals(pack, study):
     S = np.zeros((len(study), study.protocol.n_meas))
     for a, sl in zip(study.protocol, study.protocol.slices):
         prim = walker_primitives(pack, a)
+        prim.refuse_bound_pool([study.resolved(k)[0] for k in range(len(study))], "study")
         for k in range(len(study)):
             S[k, sl] = prim.signal(*study.resolved(k))
     return S
