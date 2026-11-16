@@ -74,6 +74,8 @@ class Primitives:
         n_free = n - 1 if self.has_bound else n
         if not self.has_bound and (T2_b is not None or T1_b is not None):
             raise ValueError("this pack carries no bound column: T2_b, T1_b and delta_omega_b are not read")
+        if (T2_b is not None or T1_b is not None) and not (t is not None and (t.T2 is not None or t.T1 is not None)):
+            raise ValueError("T2_b and T1_b are read with a tissue that declares a T2 or T1, and this read has none")
         invT2 = np.zeros(n); invT1 = np.zeros(n); rho2_D = 0.0; rho1_D = 0.0
         if t is not None and (t.T2 is not None or t.T1 is not None):
             if self.exposure_t2 is None:
@@ -119,6 +121,13 @@ class Primitives:
                 raise ValueError(f"rho1 / D = {rho1_D:.4g} 1/m is beyond this pack's contact envelope, rho2 / D <= "
                                  f"{float(self.rho2_over_D_max):.4g} 1/m (replay_envelope.tissue.rho2_over_D_max)")
         return invT2, invT1, rho2_D, rho1_D
+
+    def refuse_bound_pool(self, tissues, route):
+        """Refuse by name a ``route`` that has no bound-pool parameters when these primitives carry the bound pool and any of
+        ``tissues`` declares a T2 or T1 (RPK.md 5.3, 8.8)."""
+        if self.has_bound and any(t is not None and (t.T2 is not None or t.T1 is not None) for t in tissues):
+            raise ValueError(f"{route} does not read the bound pool of a pack that carries the bound column (RPK.md 5.3, 8.8): "
+                             "replay, walker_signals, walker_phases and replay_bloch do")
 
     def field_scalars(self, tissue, scanner):
         """``(B0 chi_iso, B0 chi_aniso)`` for a pair as :func:`~dmipy_replay.replay.replay.field_term` resolves it on the

@@ -168,10 +168,11 @@ def _bloch_replay_terms(trajectory, h, G, dt_wf, rf_events, *, T2, T1, comp_traj
     def rate(per_comp, scalar, bound_T):
         """Per piece, the rate of the pool occupancies: ``sum_g f_g / T_g`` over ``comp_traj`` (the geometric pools'
         occupancies, the bound occupancy already taken out of them) plus ``f_bound / T_bound``."""
+        if comp_traj is not None:
+            f = occupancy("comp_traj", comp_traj, 3)
         if per_comp is not None:
             if comp_traj is None:
                 raise ValueError("comp_traj is required with per-compartment relaxation.")
-            f = occupancy("comp_traj", comp_traj, 3)
             r = 1.0 / np.asarray(per_comp, np.float64)
             if f.shape[2] != r.size:
                 raise ValueError(f"comp_traj holds {f.shape[2]} pools and the per-compartment times {r.size}")

@@ -526,7 +526,8 @@ def pose_series(pack, waveforms, *, tissue=None, scanner=None, pose=None, compar
         _ph = (lambda name, **f: run.phase(name, **f)) if run is not None else (lambda name, **f: None)
         from dmipy_replay.acquisition.waveforms import rotate_waveform
         wf0 = rotate_waveform(first, R_s.T) if R_s is not None else first
-        P0 = pack._prepare(wf0, tissue=tissue, scanner=scanner, orientation=None, compartment=compartment)
+        P0 = pack._prepare(wf0, tissue=tissue, scanner=scanner, orientation=None, compartment=compartment,
+                              bound_route="pose_series")
         if R_s is not None:
             P0["b0_dir"] = tuple(R_s.T @ np.array([0.0, 0.0, 1.0]))
         ew, norm = P0["pathway"] * P0["ew"], P0["norm"]

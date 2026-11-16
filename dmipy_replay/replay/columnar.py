@@ -596,6 +596,7 @@ class ColumnarPack:
                 w_all = None
                 for a, sl in zip(study.protocol, study.protocol.slices):
                     prim = pk.walker_primitives(a, tol=None); w_all = prim.w
+                    prim.refuse_bound_pool([t_ for t_, _ in pairs], "image_study")
                     pad = lambda x, shape: (np.zeros((n_pad,) + shape) if x is None else np.concatenate([np.asarray(x, np.float64), np.zeros((n_pad - n,) + shape)]))
                     n_pools = prim.n_pools or 1
                     phi = pad(prim.phi, (prim.phi.shape[1],)); fi = pad(prim.field_iso, ()); fa = pad(prim.field_aniso, ())

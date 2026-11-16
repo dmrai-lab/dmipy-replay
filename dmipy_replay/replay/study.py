@@ -196,6 +196,7 @@ def study_signals(pack, study):
     S = np.zeros((len(study), study.protocol.n_meas))
     for a, sl in zip(study.protocol, study.protocol.slices):
         prim = walker_primitives(pack, a)
+        prim.refuse_bound_pool([study.resolved(k)[0] for k in range(len(study))], "study")
         for k in range(len(study)):
             S[k, sl] = prim.signal(*study.resolved(k))
     return S

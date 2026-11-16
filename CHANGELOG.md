@@ -22,8 +22,8 @@ the project follows [Semantic Versioning](https://semver.org/).
   (`compression.occupancy_pieces`); the per-block-end spelling is removed. A walker with no occupancy event in the read
   window `(0, TE]` reads as before, bit for bit; a walker with one changes. The longitudinal relaxation of the propagator is
   unchanged.
-- **A wall that binds states its bound pool's mean dwell** (`Wall.mt_dwell`, a `Dwell` of seconds per side;
-  dmrai-lab/dmrai#72). Stated exactly when a side's `mt_reactivity` is positive, positive on each side that binds and
+- **A wall that binds states its bound pool's mean dwell** (`Wall.mt_dwell`, a `Dwell` of seconds per side).
+  Stated exactly when a side's `mt_reactivity` is positive, positive on each side that binds and
   0 on each side that does not, refused by name otherwise; a time, so `SubstrateSpec.scaled` keeps it. A wall that
   binds nothing writes none: every existing spec reads and writes as it did.
 - **A time view at any diffusivity** (`ReplayPack.at_diffusivity`, `Tissue(D=)`, `Tissue(kappa=)`): a view at

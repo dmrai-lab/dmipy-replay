@@ -415,3 +415,46 @@ def test_a_pack_without_the_bound_column_reads_as_it_did(spin_echo):
     assert counts == dict(no_event=6234, with_event=1766, old_off_by_more_than_1e9=1758, new_differs_from_golden=1758)
     _same(bl[~has], old[~has])                                                   # the protected set: bit for bit
     assert np.abs(np.abs(bl[has, 0]) - exact[has]).max() < 1e-12                 # the others: the exact runs
+
+
+# ---- no parameter is silently ignored; no route reads relaxation without the bound pool's ------------------------------
+
+def test_bound_pool_parameters_given_to_a_read_that_does_not_use_them_are_refused(bound_pack, spin_echo):
+    pack, _ = bound_pack
+    text = "T2_b and T1_b are read with a tissue that declares a T2 or T1, and this read has none"
+    for fn in (pack.replay, pack.walker_signals, pack.walker_phases):
+        with pytest.raises(ValueError, match=re.escape(text)):
+            fn(spin_echo, T2_b=1e-3, T1_b=0.05)                                        # no tissue
+        with pytest.raises(ValueError, match=re.escape(text)):
+            fn(spin_echo, tissue=Tissue(), T2_b=1e-3, T1_b=0.05)                        # a tissue without T2 or T1
+    prim = pack.walker_primitives(spin_echo, tol=None)
+    for fn in (prim.signals, prim.signal, prim.reduction_terms):
+        with pytest.raises(ValueError, match=re.escape(text)):
+            fn(None, T2_b=1e-3, T1_b=0.05)
+    with pytest.raises(ValueError, match=re.escape(text)):
+        prim.rates(None, T2_b=1e-3)
+
+
+def test_routes_without_the_bound_pool_refuse_a_bound_pack_by_name(bound_pack, spin_echo):
+    pack, _ = bound_pack
+    with pytest.raises(ValueError, match="pose_responses does not read the bound pool"):
+        pack.pose_response(spin_echo, tissue=TISSUE)
+    with pytest.raises(ValueError, match="pose_series does not read the bound pool"):
+        pack.pose_series([spin_echo], tissue=TISSUE)
+    study = dr.Study(dr.StudyProtocol([dr.Acquisition(spin_echo)]), tissues=[TISSUE])
+    with pytest.raises(ValueError, match="study does not read the bound pool"):
+        pack.study(study)
+    prim = pack.walker_primitives(spin_echo, tol=None)             # the guard the columnar image_study calls on its primitives
+    with pytest.raises(ValueError, match="image_study does not read the bound pool"):
+        prim.refuse_bound_pool([TISSUE], "image_study")
+    prim.refuse_bound_pool([None, Tissue()], "image_study")        # nothing relaxes: nothing to refuse
+    free = dr.read_rpk(DATA / "slab_exchange.rpk")
+    free.pose_response(spin_echo, tissue=TISSUE)                   # a pack without the column is read as before
+
+
+def test_a_block_end_shaped_comp_traj_is_refused_with_a_scalar_time_too():
+    n_t = 5
+    traj, G = np.zeros((1, n_t, 3)), np.zeros((1, n_t, 3))
+    rf = [RFEvent(0.0, 90.0, "x", axis_deg=0.0)]
+    with pytest.raises(ValueError, match="PIECE"):
+        replay_bloch(traj, H, G, H, rf, T2=0.1, T1=1.0, comp_traj=np.zeros((1, n_t), int))

@@ -1423,7 +1423,8 @@ class ReplayPack:
                                chi_aniso=P["chi_aniso"], has_aniso=_has_aniso(gm, pm.get("channels")))
 
     def _prepare(self, waveform, *, tissue, scanner, orientation, compartment, relaxation=True, surface=True,
-                 pathway=True, read=None, any_field=False, T2_b=None, T1_b=None, delta_omega_b=None):
+                 pathway=True, read=None, any_field=False, T2_b=None, T1_b=None, delta_omega_b=None,
+                 bound_route=None):
         """Everything a replay resolves before it reads the bands: the waveform (its physical and its effective gradient,
         rotated into the substrate frame when a pose is given), the tissue's values (none for ``None``), the susceptibility
         term :func:`field_term` resolves from the pack's declared field, the tissue's chi and the scanner's B0 (``B0``
@@ -1500,7 +1501,7 @@ class ReplayPack:
         logw = np.zeros(n_w)
         if relaxation:
             bcol = self._bound_pool(ch, T2_b, T1_b, delta_omega_b, bloch=False,
-                                    reads_relaxation=T2 is not None or T1 is not None)
+                                    reads_relaxation=T2 is not None or T1 is not None, route=bound_route)
         if (T2 is not None or T1 is not None) and relaxation:
             if not self.has_relaxation:
                 raise ValueError("T2 / T1 were given but the pack carries no compartment channel (C1); build it "
@@ -1559,7 +1560,7 @@ class ReplayPack:
                     G_eff_wf=G_eff, windows=windows, gate_wf=gate_wf, gate_cum=gate_cum, plan=plan, K_use=K_use, M_use=M_use)
 
     @staticmethod
-    def _bound_pool(ch, T2_b, T1_b, delta_omega_b, *, bloch, reads_relaxation):
+    def _bound_pool(ch, T2_b, T1_b, delta_omega_b, *, bloch, reads_relaxation, route=None):
         """The pack's C1 ``bound`` column (``None`` when it carries none), after holding the bound pool's replay knobs
         to what the pack and the route need: ``T2_b`` and ``T1_b`` with any relaxation or Bloch read of a pack that
         carries the column, ``delta_omega_b`` with the Bloch route alone, and none of the three without the column
@@ -1570,8 +1571,13 @@ class ReplayPack:
             if T2_b is not None or T1_b is not None or delta_omega_b is not None:
                 raise ValueError("this pack carries no bound column: T2_b, T1_b and delta_omega_b are not read")
             return None
+        if route is not None and reads_relaxation:
+            raise ValueError(f"{route} does not read the bound pool of a pack that carries the bound column (RPK.md 5.3, 8.8): "
+                             "replay, walker_signals, walker_phases and replay_bloch do")
         if delta_omega_b is not None and not bloch:
             raise ValueError("delta_omega_b is read by replay_bloch only")
+        if not bloch and not reads_relaxation and (T2_b is not None or T1_b is not None):
+            raise ValueError("T2_b and T1_b are read with a tissue that declares a T2 or T1, and this read has none")
         if bloch and delta_omega_b is None:
             raise ValueError("a pack carrying the bound column needs delta_omega_b for replay_bloch (RPK.md 6.5)")
         if (bloch or reads_relaxation) and (T2_b is None or T1_b is None):
