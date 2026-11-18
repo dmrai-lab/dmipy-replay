@@ -5,6 +5,22 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **Every builder plays within the slew it is given.** At a finite `slew_rate` no step of a built sequence's played
+  gradient, on any axis, exceeds the slew (`ScannerSequence.check_slew` refuses one that does, `ScannerSequence.peak_slew`
+  reports the steps; every builder applies the check), for every ramp length, a ramp shorter than one step included:
+  a ramped lobe keeps every sample whose mid-step lies inside its span, a train of lobes is one sampled waveform, and a
+  self-refocusing pair is a lobe and its exact negative starting on the first step after the first lobe's ideal end
+  (an axis pair is less than one step longer than its ideal). A ramped lobe's area is its ideal area to within
+  `min(1, dt / (4 eps)) g dt`. An automatic `TE` at a finite slew is `minimum_te` (the continuous floor) extended by the
+  fewest whole steps at which every block fits whole; an explicit `TE` that leaves a gradient-echo block less room is
+  refused by name. `Encoding.qvalues` of a built sequence is the largest `|q(t)|` its effective gradient reaches along
+  the measurement's direction, from the built samples (`assemble(state_q=)` in place of `q_width=`). The stated q
+  changes: a ramped pulsed pair by the built area and amplitude (`pgse` 9 / 29 ms, b 7.5e9 at 600 T/m/s: +2.1e-5; the
+  old nominal value exceeded the old built lobe by 1.7e-4); a square pulsed pair by its whole-step lobe (up to one
+  step of the lobe, -2.6e-3 for `pgse` 9 / 29 ms); `cpmg` and `splice` by their ramps (-8e-3, -3e-3); the trapezoidal
+  OGSE from `g sigma` to one lobe's q (about `1 / (2 f sigma)` of it: 5.11e4 -> 6.22e3 /m at 100 Hz, 40 ms); the cosine
+  OGSE from `g sigma` to about a quarter period's (4.26e4 -> 7.04e3 /m at 50 Hz, 20 ms). The one reader of
+  `qvalues` in the package, `set_b`, scales whatever is stated and is otherwise unchanged.
 - **The `bound` column is read** (RPK.md 5.3, 6.5, 8.8). A pack that carries the C1 `bound` occupancy column is replayed with
   the joint occupancy `f_bound = b`, `f_g = (1 - b) [comp = g]` and the rate `R(t) = sum_c f_c(t) R_c`, exact over the runs of
   both columns, by `ReplayPack.replay`, `walker_signals`, `walker_phases`, the study route (`walker_primitives` holds one

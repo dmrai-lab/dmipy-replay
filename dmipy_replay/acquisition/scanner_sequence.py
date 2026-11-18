@@ -114,10 +114,14 @@ def concomitant_terms(G, position_m, B0_T, b0_axis=(0.0, 0.0, 1.0)):
 class Encoding:
     """The per-measurement encoding an analytical layer reads: what the gradient means, not what it is.
 
-    ``bvalues`` (s/m^2), ``gradient_directions`` (unit vectors), ``TE`` (s) per measurement; ``qvalues``,
+    ``bvalues`` (s/m^2), ``gradient_directions`` (unit vectors), ``TE`` (s) per measurement; ``qvalues`` (1/m), on a
+    built sequence the largest ``|q(t)|`` its effective gradient reaches along the measurement's direction (a pulsed
+    pair's lobe area, one lobe's of an oscillating train, a quarter period's of a cosine, as built), on
+    :func:`~dmipy_replay.sequences.builders.from_waveform` the square PGSE's of the same b, ``delta``, ``Delta``;
     ``gradient_strengths``, ``delta``, ``Delta`` where the family defines them; the family's own parameters
     (``oscillation_frequency`` ... ``cpmg_n_echoes``); and ``minimum_te`` / ``te_auto``, the echo time floor
-    the gradient schedule sets and whether ``TE`` was left to it.
+    the gradient schedule sets (in continuous time) and whether ``TE`` was left to it; a ``TE`` left to a builder at a
+    finite slew is that floor extended by the fewest whole steps of its grid at which every block fits whole.
     """
     bvalues: np.ndarray
     gradient_directions: np.ndarray
@@ -510,6 +514,30 @@ class ScannerSequence:
         if res > REFOCUS_ATOL and float(np.abs(self.G).max()) > 0.0:
             raise ValueError(f"the played gradient is not refocused at the echo (|q(TE)|/max|q| = {res:.2e} > "
                              f"{REFOCUS_ATOL:.0e})")
+        return self
+
+    def peak_slew(self):
+        """``(n_meas, 3)`` T/m/s: each measurement's largest step of the played gradient per axis,
+        ``max_k |G_a[k+1] - G_a[k]| / dt``, the gradient taken as off before the first sample and after the last."""
+        G = np.asarray(self.played_gradient, dtype=np.float64)
+        pad = np.zeros_like(G[:, :1])
+        return np.abs(np.diff(np.concatenate([pad, G, pad], axis=1), axis=1)).max(axis=1) / self.dt
+
+    def check_slew(self, slew_max):
+        """Refuse a played gradient that steps faster than ``slew_max`` (T/m/s, one value or one per axis): on
+        every measurement and axis, ``max |diff G_a| <= slew_max_a dt + 2 spacing(float32(max |G_a|))`` (the
+        steps of :meth:`peak_slew`; the spacing term is the float32 rounding of the two samples of a step).
+        Raises naming the measurement, the axis, the step and the limit; returns ``self``."""
+        lim = np.broadcast_to(np.asarray(slew_max, dtype=np.float64), (3,))
+        G = np.asarray(self.played_gradient, dtype=np.float32)
+        top = np.abs(G).max(axis=1)                                          # (n_meas, 3), float32
+        allowed = lim[None, :] * self.dt + 2.0 * np.spacing(top).astype(np.float64)
+        step = self.peak_slew() * self.dt
+        over = step > allowed
+        if np.any(over):
+            m, a = (int(i) for i in np.argwhere(over)[0])
+            raise ValueError(f"measurement {m}, axis {'xyz'[a]}: the played gradient steps at "
+                             f"{step[m, a] / self.dt:.6g} T/m/s, above the slew limit {lim[a]:.6g} T/m/s")
         return self
 
     # ── the measurement axis ───────────────────────────────────────────────────────────────────────
