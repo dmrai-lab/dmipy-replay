@@ -512,6 +512,30 @@ class ScannerSequence:
                              f"{REFOCUS_ATOL:.0e})")
         return self
 
+    def peak_slew(self):
+        """``(n_meas, 3)`` T/m/s: each measurement's largest step of the played gradient per axis,
+        ``max_k |G_a[k+1] - G_a[k]| / dt``, the gradient taken as off before the first sample and after the last."""
+        G = np.asarray(self.played_gradient, dtype=np.float64)
+        pad = np.zeros_like(G[:, :1])
+        return np.abs(np.diff(np.concatenate([pad, G, pad], axis=1), axis=1)).max(axis=1) / self.dt
+
+    def check_slew(self, slew_max):
+        """Refuse a played gradient that steps faster than ``slew_max`` (T/m/s, one value or one per axis): on
+        every measurement and axis, ``max |diff G_a| <= slew_max_a dt + 2 spacing(float32(max |G_a|))`` (the
+        steps of :meth:`peak_slew`; the spacing term is the float32 rounding of the two samples of a step).
+        Raises naming the measurement, the axis, the step and the limit; returns ``self``."""
+        lim = np.broadcast_to(np.asarray(slew_max, dtype=np.float64), (3,))
+        G = np.asarray(self.played_gradient, dtype=np.float32)
+        top = np.abs(G).max(axis=1)                                          # (n_meas, 3), float32
+        allowed = lim[None, :] * self.dt + 2.0 * np.spacing(top).astype(np.float64)
+        step = self.peak_slew() * self.dt
+        over = step > allowed
+        if np.any(over):
+            m, a = (int(i) for i in np.argwhere(over)[0])
+            raise ValueError(f"measurement {m}, axis {'xyz'[a]}: the played gradient steps at "
+                             f"{step[m, a] / self.dt:.6g} T/m/s, above the slew limit {lim[a]:.6g} T/m/s")
+        return self
+
     # ── the measurement axis ───────────────────────────────────────────────────────────────────────
     def with_prescription(self, prescription):
         """The same acquisition, prescribed in the bore: isocenter, axes, voxel size and matrix

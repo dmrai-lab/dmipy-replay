@@ -26,7 +26,7 @@ import numpy as np
 
 from ..acquisition.rf import RFEvent, RFSchedule, role_of
 from ..acquisition.scanner_sequence import REFOCUS_ATOL, Encoding, Protocol, ScannerSequence
-from ..constants import DEFAULT_SLEW_RATE
+from ..constants import DEFAULT_SLEW_RATE, resolve_slew
 from ..math.gradient_conversions import g_from_b, q_from_b
 from ..acquisition.waveforms import b_from_gradient
 from ._helpers import _resolve_te, unify_length_reference_delta_Delta
@@ -88,7 +88,7 @@ def pgse(gradient_directions, delta, Delta, *, bvalues=None, gradient_strengths=
     return assemble(
         SpinEcho(gap=lambda m, g: Delta_[m] - delta_[m] - eps(m, g), timing=timing),
         gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE, n_t=n_t,
-        timing=timing, family='pgse', q_width=delta_,
+        slew_rate=slew_rate, timing=timing, family='pgse', state_q=True,
         span=lambda m, g: delta_[m] + eps(m, g),
         sample=lambda m, g, dt: trapezoid(delta_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(delta=delta_, Delta=Delta_, ramp_time=np.array([eps(m, g[m]) for m in range(n_m)])),
@@ -148,7 +148,7 @@ def ogse(gradient_directions, oscillation_frequency, gradient_duration, *, shape
     return assemble(
         SpinEcho(gap=lambda m, g: gap_[m], timing=timing),
         gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE, n_t=n_t,
-        timing=timing, family='ogse', q_width=sigma_,
+        slew_rate=slew_rate, timing=timing, family='ogse', state_q=True,
         span=lambda m, g: sigma_[m] if shaped[m] else 0.0, sample=sample,
         encoding=lambda g, te, te_min: dict(oscillation_frequency=f_, gradient_duration=sigma_,
                                             n_oscillation_cycles=np.where(shaped, f_ * sigma_, 0.0),
@@ -180,7 +180,7 @@ def pgste(gradient_directions, delta, TM, *, bvalues=None, gradient_strengths=No
     return assemble(
         StimulatedEcho(TM, flips=ste_flip_angles, timing=timing),
         gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE, n_t=n_t,
-        timing=timing, family='pgste', q_width=delta_,
+        slew_rate=slew_rate, timing=timing, family='pgste', state_q=True,
         span=lambda m, g: delta_[m] + eps(m, g),
         sample=lambda m, g, dt: trapezoid(delta_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(delta=delta_, Delta=delta_ + TM, tau_perp_SE=np.full(n_m, te - TM),
@@ -326,13 +326,17 @@ def fexi(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, slew_rate=
                    gradient_directions=dirs, TE=np.full(n_m, TE), delta=delta_, Delta=Delta_,
                    tau_perp_SE=np.full(n_m, TE - n_m_mix * dt), ramp_time=eps_, minimum_te=TE_min, te_auto=True,
                    ste_flip_angles=(a1, a2, a3))
-    return ScannerSequence(
+    seq = ScannerSequence(
         G=G, dt=dt, rf=schedule, timing=timing, crusher=crusher, family='fexi', encoding=enc,
         notes="bipolar filter - crusher - store - t_m (exchange) - recall - crusher - bipolar detection",
         build_spec=('fexi', dict(gradient_directions=gradient_directions, delta=delta, Delta=Delta, t_m=t_m, b_f=b_f,
                                  bvalues=bvalues, dt=dt, slew_rate=slew_rate, timing=timing,
                                  crusher_duration=crusher_duration, crusher_cycles=crusher_cycles,
-                                 ste_flip_angles=ste_flip_angles))).validate()
+                                 ste_flip_angles=ste_flip_angles)))
+    slew, square = resolve_slew(slew_rate)
+    if not square:
+        seq.check_slew(slew)
+    return seq.validate()
 
 
 def fexi_protocol(gradient_directions, delta, Delta, t_m, *, b_f, bvalues, dt, **kwargs):
@@ -408,7 +412,7 @@ def gre(TE, *, gradient_directions=None, bvalues=None, gradient_strengths=None, 
         enc = lambda g, te, te_min: dict(refocused=False)
     return assemble(
         GradientEcho(timing=timing), gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths,
-        TE=TE, n_t=n_t, timing=timing, family='gre', q_width=None if not weighted else delta_,
+        TE=TE, n_t=n_t, slew_rate=slew_rate, timing=timing, family='gre', state_q=weighted,
         span=span, sample=sample, encoding=enc,
         build_spec=('gre', dict(TE=TE, gradient_directions=gradient_directions, bvalues=bvalues,
                                 gradient_strengths=gradient_strengths,
@@ -426,7 +430,7 @@ def ste(gradient_duration, *, bvalues=None, gradient_strengths=None, TE=None, n_
     eps = lambda m, g: ramp_of(g, slew_rate)
     return assemble(
         GradientEcho(timing=timing), gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths,
-        TE=TE, n_t=n_t, timing=timing, family='ste',
+        TE=TE, n_t=n_t, slew_rate=slew_rate, timing=timing, family='ste',
         span=lambda m, g: sigma_[m],
         sample=lambda m, g, dt: axis_pairs(np.eye(3), sigma_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(gradient_duration=sigma_, refocused=False,
@@ -453,7 +457,7 @@ def pte(plane_normal, gradient_duration, *, bvalues=None, gradient_strengths=Non
     eps = lambda m, g: ramp_of(g, slew_rate)
     return assemble(
         GradientEcho(timing=timing), gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths,
-        TE=TE, n_t=n_t, timing=timing, family='pte',
+        TE=TE, n_t=n_t, slew_rate=slew_rate, timing=timing, family='pte',
         span=lambda m, g: sigma_[m],
         sample=lambda m, g, dt: axis_pairs(np.stack([u, v]), sigma_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(gradient_duration=sigma_, refocused=False,
@@ -494,7 +498,7 @@ def cpmg(n_echoes, TE, *, beta_deg=180.0, refocus_axis_deg=90.0, gradient_direct
     half = np.full(n_m, TE_echo / 2.0)
     return assemble(
         train, gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=None,
-        n_t=n_t_per_echo, timing=timing, family='cpmg', q_width=half,
+        n_t=n_t_per_echo, slew_rate=slew_rate, timing=timing, family='cpmg', state_q=True,
         span=lambda m, g: 0.0, sample=None,
         fill=lambda m, g, dt, n: trapezoid(n * dt - eps(m, g), eps(m, g), dt)[:n],
         encoding=lambda g, te, te_min: dict(delta=half, Delta=half, refocused=True, cpmg_n_echoes=n_echoes,
@@ -548,7 +552,7 @@ def splice(gradient_directions, delta, Delta, n_echoes, TE_echo, *, bvalues=None
     TE = float(TE_prep) + n_echoes * TE_echo
     seq = assemble(
         train, gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE,
-        n_t=n_t_per_echo, timing=timing, family='splice', q_width=delta_r,
+        n_t=n_t_per_echo, slew_rate=slew_rate, timing=timing, family='splice', state_q=True,
         span=lambda m, g: delta_r[m] + eps(m, g), sample=lambda m, g, dt: trapezoid(delta_r[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(delta=delta_r, Delta=Delta_r, refocused=True,
                                             splice_n_echoes=n_echoes, splice_TE_echo=TE_echo,

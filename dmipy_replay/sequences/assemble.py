@@ -31,7 +31,10 @@ The assemblers:
 
 Slew is a LIMIT, never a fork: a finite ``slew_rate`` gives every lobe ramps of ``g / slew`` (a cosine, whose
 own slope must stay under the limit, gets ramped edges), ``np.inf`` gives vertical ones, and the structure is
-the same either way. A block that cannot reach its amplitude inside its own span is refused, not clipped.
+the same either way. A block that cannot reach its amplitude inside its own span is refused, not clipped. A
+sequence built at a finite slew plays within it: no step of its played gradient, on any axis, is steeper than
+the slew (:meth:`~dmipy_replay.acquisition.scanner_sequence.ScannerSequence.check_slew`, applied before it is
+returned), and each ramped lobe's area is its ideal area to within ``min(1, dt / (4 eps)) g dt``.
 
 A builder passes either ``bvalues`` or ``gradient_strengths``. With ``bvalues`` the amplitude is found by
 iteration (the ramps depend on it) and then scaled so ``bvalues == b_from_gradient(G_eff, dt)`` exactly; with
@@ -49,7 +52,7 @@ import numpy as np
 from ..acquisition.rf import RFEvent, RFSchedule
 from ..acquisition.scanner_sequence import Encoding, ScannerSequence
 from ..constants import resolve_slew
-from ..math.gradient_conversions import q_from_g
+from dmipy_analytic.constants import GAMMA
 from ..acquisition.waveforms import b_from_gradient
 
 __all__ = ["trapezoid", "trapezoid_train", "cosine", "bipolar", "axis_pairs",
@@ -62,6 +65,15 @@ _EPS_T = 1e-9         # seconds: placement tolerance against floating rounding
 
 
 # ── shapes: unit-amplitude blocks sampled on the sequence grid ─────────────────────────────────────────────────
+#
+# Sample k of a block is the value of its ideal shape at the middle of its step, (k + 1/2) dt; the engine applies
+# G[k] over [k dt, (k + 1) dt). A RAMPED block (eps > 0) keeps every sample whose mid-step lies inside its span
+# (:func:`_inside`), so the waveform it plays is the ideal shape sampled, zero outside it: the ideal shape changes
+# by at most dt / eps (unit amplitude) between two points dt apart, hence so does the sampled block, and no step is
+# steeper than the slew the ramps were built for. Lobes that follow one another are one sampled waveform (a train),
+# or, where a pair must cancel sample for sample (an axis pair, a bipolar pair), the same lobe negated and placed
+# no earlier than the first step at or after the first lobe's ideal end. A square block (eps = 0, the
+# instantaneous limit) has ``floor(span / dt)`` samples and no slew to hold.
 
 def ramp_of(g, slew_rate):
     """The ramp a lobe of amplitude ``g`` needs at ``slew_rate`` (0 in the instantaneous limit)."""
@@ -69,46 +81,72 @@ def ramp_of(g, slew_rate):
     return 0.0 if square or g <= 0.0 else float(g) / float(slew)
 
 
-def trapezoid(delta, eps, dt):
-    """One unit lobe: a ramp 0 -> 1 over ``eps``, flat until ``delta``, a ramp 1 -> 0 over ``eps`` -- the
-    half-amplitude width is ``delta``, the physical span ``delta + eps``; ``eps = 0`` is the square limit.
-    Sample ``k`` is the value at the middle of its step, ``(k + 1/2) dt`` -- the engine applies ``G[k]`` over
-    ``[k dt, (k + 1) dt)``, so a lobe rasterises symmetrically however short its ramps."""
-    delta, eps = float(delta), float(eps)
-    if eps > delta + _EPS_T:
-        raise ValueError(f"a lobe of {delta*1e3:.3f} ms (half-amplitude width) cannot ramp over {eps*1e3:.3f} ms: "
-                         f"the ramp is longer than the lobe -- lower the amplitude, lengthen the lobe or raise the slew")
-    n = max(1, int(math.floor((delta + eps) / dt + _EPS_T)))          # whole steps inside the span
-    t = (np.arange(n) + 0.5) * dt
-    if eps <= 0.0:
-        return np.ones(n)
-    a = np.ones(n)
+def _inside(span, dt):
+    """The number of steps whose mid-step ``(k + 1/2) dt`` lies inside ``(0, span)`` (at least one)."""
+    return max(1, int(math.ceil(float(span) / dt - 0.5 - _EPS_T)))
+
+
+def _square_count(span, dt):
+    """The number of whole steps inside ``span`` (at least one): a square block's length."""
+    return max(1, int(math.floor(float(span) / dt + _EPS_T)))
+
+
+def _lobe_at(t, delta, eps):
+    """The ideal unit lobe at times ``t`` (its own clock, 0 at its start): a ramp 0 -> 1 over ``eps``, flat until
+    ``delta``, a ramp 1 -> 0 over ``eps``, zero outside ``[0, delta + eps]``."""
+    a = np.ones_like(t)
     up = t < eps
     a[up] = t[up] / eps
     dn = t >= delta
     a[dn] = np.clip((delta + eps - t[dn]) / eps, 0.0, 1.0)
+    a[t < 0.0] = 0.0
     return a
+
+
+def trapezoid(delta, eps, dt):
+    """One unit lobe: a ramp 0 -> 1 over ``eps``, flat until ``delta``, a ramp 1 -> 0 over ``eps`` -- the
+    half-amplitude width is ``delta``, the physical span ``delta + eps``; ``eps = 0`` is the square limit.
+    Sample ``k`` is the value at the middle of its step, ``(k + 1/2) dt``; a ramped lobe keeps every sample whose
+    mid-step lies inside its span, so no step between samples (nor from or to zero) exceeds ``dt / eps``."""
+    delta, eps = float(delta), float(eps)
+    if eps > delta + _EPS_T:
+        raise ValueError(f"a lobe of {delta*1e3:.3f} ms (half-amplitude width) cannot ramp over {eps*1e3:.3f} ms: "
+                         f"the ramp is longer than the lobe -- lower the amplitude, lengthen the lobe or raise the slew")
+    if eps <= 0.0:
+        return np.ones(_square_count(delta, dt))
+    t = (np.arange(_inside(delta + eps, dt)) + 0.5) * dt
+    return _lobe_at(t, delta, eps)
 
 
 def trapezoid_train(n_lobes, lobe, eps, dt):
     """``n_lobes`` adjacent unit lobes of span ``lobe`` each, alternating in sign (+, -, +, ...): the trapezoidal
-    OGSE block (Drobnjak et al. 2016); one lobe is a PGSE lobe. Each lobe ramps over ``eps`` at both ends."""
+    OGSE block (Drobnjak et al. 2016); one lobe is a PGSE lobe. Each lobe ramps over ``eps`` at both ends, so two
+    neighbours pass from +1 to -1 along one straight ramp of ``2 eps``. A ramped train is the one ideal waveform
+    sampled at mid-step (every lobe at its own ideal time); a square train is ``n_lobes`` square lobes of
+    ``floor(lobe / dt)`` samples each, back to back."""
     if eps > lobe / 2.0 + _EPS_T:
         raise ValueError(f"a lobe of {lobe*1e3:.3f} ms cannot ramp up and down over {eps*1e3:.3f} ms each at this "
                          f"amplitude and slew: lower the amplitude, the frequency, or raise the slew")
-    one = trapezoid(lobe - eps, eps, dt)
-    n1 = len(one)
-    out = np.empty(int(n_lobes) * n1)
-    for k in range(int(n_lobes)):
-        out[k * n1:(k + 1) * n1] = one if k % 2 == 0 else -one
-    return out
+    n_lobes, lobe, eps = int(n_lobes), float(lobe), float(eps)
+    if eps <= 0.0:
+        one = trapezoid(lobe, 0.0, dt)
+        n1 = len(one)
+        out = np.empty(n_lobes * n1)
+        for k in range(n_lobes):
+            out[k * n1:(k + 1) * n1] = one if k % 2 == 0 else -one
+        return out
+    t = (np.arange(_inside(n_lobes * lobe, dt)) + 0.5) * dt
+    k = np.minimum(np.floor(t / lobe).astype(int), n_lobes - 1)
+    return np.where(k % 2 == 0, 1.0, -1.0) * _lobe_at(t - k * lobe, lobe - eps, eps)
 
 
 def cosine(n_cycles, frequency, eps, dt):
     """``n_cycles`` whole periods of ``cos(2 pi f t)`` -- the frequency-selective OGSE block, DC-free in q -- with
-    its edges ramped over ``eps`` (the cosine starts and ends at full amplitude; a scanner ramps into it)."""
+    its edges ramped over ``eps`` (the cosine starts and ends at full amplitude; a scanner ramps into it). A ramped
+    block keeps every sample whose mid-step lies inside its span; a square one (``eps = 0``) has
+    ``floor(span / dt)`` samples."""
     sigma = float(n_cycles) / float(frequency)
-    n = max(2, int(math.floor(sigma / dt + _EPS_T)))
+    n = max(2, _inside(sigma, dt) if eps > 0.0 else _square_count(sigma, dt))
     t = (np.arange(n) + 0.5) * dt                                     # mid-step, as every shape
     a = np.cos(2.0 * np.pi * float(frequency) * t)
     if eps > 0.0:
@@ -116,12 +154,22 @@ def cosine(n_cycles, frequency, eps, dt):
     return a
 
 
+def _second_lobe_at(i1, span, eps, dt):
+    """Where the negated copy of a lobe of ``span`` starts in a pair: sample ``i1``, and for a ramped lobe no earlier
+    than ``ceil(span / dt)``, the first step at or after the first lobe's ideal end. The step across the junction is
+    then the first lobe's last sample plus its first, at most ``dt / eps``."""
+    if eps <= 0.0:
+        return int(i1)
+    return max(int(i1), int(math.ceil(float(span) / dt - _EPS_T)))
+
+
 def bipolar(delta, Delta, eps, dt):
-    """A self-refocusing pair: a unit lobe at 0 and its negative ``Delta`` later (centre to centre)."""
+    """A self-refocusing pair: a unit lobe at 0 and its negative ``Delta`` later (centre to centre), sample for
+    sample, so the pair's samples sum to zero exactly."""
     if float(Delta) < float(delta) + float(eps) - _EPS_T:
         raise ValueError("the two lobes of a bipolar pair overlap: Delta is shorter than the lobe with its ramp")
     lobe = trapezoid(delta, eps, dt)
-    i1 = int(round(float(Delta) / dt))
+    i1 = _second_lobe_at(round(float(Delta) / dt), float(delta) + float(eps), float(eps), dt)
     out = np.zeros(i1 + len(lobe))
     out[:len(lobe)] += lobe
     out[i1:] -= lobe
@@ -130,18 +178,22 @@ def bipolar(delta, Delta, eps, dt):
 
 def axis_pairs(axes, duration, eps, dt):
     """Sequential self-refocusing pairs, one per axis in ``axes`` (rows, unit vectors), back to back over
-    ``duration``: the canonical spherical (three axes) and planar (two) tensor encodings. Returns ``(n, 3)``;
-    each axis's q returns to zero inside its own pair, so the off-diagonal B is exactly zero."""
+    ``duration``: the canonical spherical (three axes) and planar (two) tensor encodings. Returns ``(n, 3)``.
+    Each axis plays a lobe of span ``duration / (2 n_axes)`` and then its exact negative, sample for sample, so its
+    q returns to zero inside its own pair and the off-diagonal B is exactly zero. A ramped pair's negative lobe
+    starts at the first step at or after the first lobe's ideal end, so each pair is less than one step longer than
+    its ideal ``2 duration / (2 n_axes)`` and pair ``i`` starts less than ``i`` steps after its ideal time."""
     axes = np.asarray(axes, dtype=np.float64)
     n_seg = 2 * len(axes)
     seg = float(duration) / n_seg
     lobe = trapezoid(seg - eps, eps, dt)
     n1 = len(lobe)
-    out = np.zeros((n_seg * n1, 3))
+    c1 = _second_lobe_at(n1, seg, float(eps), dt)                     # the negative lobe's offset in the pair
+    out = np.zeros((len(axes) * (c1 + n1), 3))
     for i, ax in enumerate(axes):
-        a0 = (2 * i) * n1
+        a0 = i * (c1 + n1)
         out[a0:a0 + n1] += lobe[:, None] * ax
-        out[a0 + n1:a0 + 2 * n1] -= lobe[:, None] * ax
+        out[a0 + c1:a0 + c1 + n1] -= lobe[:, None] * ax
     return out
 
 
@@ -202,6 +254,8 @@ def _margin_cap(dt, end1_idx, start2_idx, lead, tail_bound):
 class SpinEcho:
     """90 at 0, 180 at TE/2, echo at TE; each row's block pair centred on the 180 with its own ``gap``."""
 
+    truncates_to_margin = True            # an explicit TE's block pair is cut to the budget's margin (_margin_cap)
+
     def __init__(self, gap, timing=None):
         self.gap = gap                    # callable (m, g) -> seconds between the two blocks
         self.timing = timing
@@ -233,6 +287,8 @@ class SpinEcho:
 class StimulatedEcho:
     """90 at 0, store, recall; the block before the store and after the recall, ``TE = 2 t_store + TM``."""
 
+    truncates_to_margin = True
+
     def __init__(self, TM, flips=(90.0, 90.0, 90.0), timing=None):
         self.TM = float(TM)
         self.flips = tuple(float(a) for a in flips)
@@ -261,7 +317,11 @@ class StimulatedEcho:
 
 
 class GradientEcho:
-    """90 at 0 and no refocusing pulse; the (self-refocusing) block starts when the excitation lets it."""
+    """90 at 0 and no refocusing pulse; the (self-refocusing) block starts when the excitation lets it and must end
+    before the budget's readout tail: a block that refocuses itself is never cut, so one longer than that room is
+    refused."""
+
+    truncates_to_margin = False
 
     def __init__(self, timing=None):
         self.timing = timing
@@ -272,7 +332,11 @@ class GradientEcho:
     def layout(self, spans, g, TE, dt, n_t):
         schedule = RFSchedule([RFEvent(_dur(self.timing, "t_prep"), 90, 'Mz→Mxy',
                                        duration_s=_dur(self.timing, "t_excite"))])
-        return schedule, [[("start", _lead(self.timing), 1.0)] for _ in spans]
+        cap = None
+        if self.timing is not None:
+            lead = _lead(self.timing)
+            cap = _steps_before(TE - _tail(self.timing), dt) - _first_step_at(lead, dt)
+        return schedule, [[("start", _lead(self.timing), 1.0, cap)] for _ in spans]
 
 
 class PreparedEchoTrain:
@@ -404,23 +468,57 @@ class EchoTrain:
 
 # ── the driver ──────────────────────────────────────────────────────────────────────────────────────────────────
 
+class _NoRoom(ValueError):
+    """A block that does not fit whole where its layout puts it on this grid."""
+
+
 def _place(G, m, i0, block):
     n = block.shape[0]
     if i0 < 0 or i0 + n > G.shape[1] - 1:                             # the last sample is the readout: not a step
-        raise ValueError(f"an encoding block of {n} samples at sample {i0} runs off the {G.shape[1]}-sample grid")
+        raise _NoRoom(f"an encoding block of {n} samples at sample {i0} runs off the {G.shape[1]}-sample grid")
     G[m, i0:i0 + n] += block
 
 
+def _first_lobe_q(G, dirs, dt):
+    """``(n_m,)`` 1/m: ``gamma / (2 pi)`` times the area of each row's first lobe along its unit direction -- the
+    samples from the first nonzero one up to the first that is zero or of the other sign, times ``dt``."""
+    q = np.zeros(G.shape[0])
+    for m in range(G.shape[0]):
+        norm = float(np.linalg.norm(dirs[m]))
+        if norm == 0.0:
+            continue
+        s = G[m] @ (dirs[m] / norm)
+        nz = np.flatnonzero(s)
+        if nz.size == 0:
+            continue
+        i0 = int(nz[0])
+        same = np.sign(s[i0:]) == np.sign(s[i0])
+        i1 = i0 + (int(np.argmin(same)) if not np.all(same) else same.size)
+        q[m] = abs(float(np.sum(s[i0:i1]))) * dt * GAMMA / (2.0 * np.pi)
+    return q
+
+
+#: The most whole steps an automatic ``TE`` adds to the floor the blocks set, so that every block fits whole.
+_ROOM_STEPS = 8
+
+
 def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_strengths=None, sample=None,
-             fill=None, TE=None, n_t=1000, slew_rate=np.inf, family, build_spec, encoding=None, q_width=None,
+             fill=None, TE=None, n_t=1000, slew_rate=np.inf, family, build_spec, encoding=None, state_q=False,
              timing=None):
     """Build a validated :class:`ScannerSequence` from an assembler and a shape.
 
     ``span(m, g)`` is row ``m``'s block duration at amplitude ``g``; ``sample(m, g, dt)`` its unit block, ``(n,)``
     along the row's direction or ``(n, 3)``; ``fill(m, g, dt, n)`` a unit block of ``n`` samples for an assembler
     that hands out stretches to fill (the echo train). Exactly one of ``bvalues`` / ``gradient_strengths`` sets
-    the amplitude; ``encoding(g, TE, te_min)`` returns the family's extra ``Encoding`` fields; ``q_width`` is the
-    lobe width ``q = gamma g width / 2 pi`` reports.
+    the amplitude; ``encoding(g, TE, te_min)`` returns the family's extra ``Encoding`` fields; ``state_q`` states
+    ``Encoding.qvalues``, ``gamma / (2 pi)`` times the area of each row's first built lobe.
+
+    ``slew_rate`` is the limit the shapes' ramps were built for. When it is finite the returned sequence is
+    checked against it (:meth:`ScannerSequence.check_slew`), and an automatic ``TE`` (``TE=None``, on an assembler
+    whose grid is not fixed by its echoes) is the floor the blocks set extended by the fewest whole steps of the
+    grid, ``TE = te_min (n_t - 1) / (n_t - 1 - k)``, at which every block is placed whole (a ramped block keeps
+    every sample inside its span, so it can be one step longer than the floor's room); ``Encoding.minimum_te``
+    is that floor.
     """
     dirs = np.asarray(gradient_directions, dtype=np.float64)
     if dirs.ndim == 1:
@@ -428,6 +526,7 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     n_m = dirs.shape[0]
     if bvalues is not None and gradient_strengths is not None:
         raise ValueError("give bvalues= or gradient_strengths=, not both")
+    slew, square = resolve_slew(slew_rate)
     b_target = None if bvalues is None else np.broadcast_to(np.asarray(bvalues, np.float64), (n_m,)).copy()
     if b_target is not None and np.any(b_target < 0):
         raise ValueError("bvalues must be non-negative")
@@ -438,16 +537,9 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     else:
         g = np.zeros(n_m)                                             # the square unit shape seeds the iteration
 
-    def _build(g, amp):
-        spans = np.array([float(span(m, g[m])) for m in range(n_m)])
-        te_min = assembler.te_min(spans, g)
-        te = te_min if TE is None else float(TE)
-        if te < te_min - _EPS_T:
-            raise ValueError(f"TE = {te*1e3:.3f} ms is below the {te_min*1e3:.3f} ms this encoding needs "
-                             f"(its blocks, their gap and the pulse / readout windows)")
-        n = int(n_t) if not hasattr(assembler, "n_t_of") else assembler.n_t_of(n_t)
+    def _lay(g, amp, te, n, whole):
         dt = te / (n - 1)
-        schedule, placements = assembler.layout(spans, g, te, dt, n)
+        schedule, placements = assembler.layout(spans_of(g), g, te, dt, n)
         G = np.zeros((n_m, n, 3), dtype=np.float64)
         for m in range(n_m):
             truncated_end = None  # (cap, capped block) from a same-row "end" placement that a following
@@ -460,6 +552,9 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
                     blk = blk[:, None] * dirs[m]
                 cap = rest[0] if kind != "at" and rest else None            # dmipy-replay#645: margin-safe length
                 if cap is not None and cap < blk.shape[0]:
+                    if whole or not assembler.truncates_to_margin:
+                        raise _NoRoom(f"row {m}: an encoding block of {blk.shape[0]} samples has room for {cap} "
+                                      f"between the budget's lead-in and readout tail")
                     if cap < 1:
                         raise ValueError(f"row {m}: the budget's lead-in / readout-tail margin leaves no room "
                                          f"on the grid (dt = {dt*1e3:.4f} ms) for this encoding block")
@@ -486,7 +581,28 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
                     i0 = _steps_before(where, dt) - blk.shape[0]
                 _place(G, m, i0, factor * amp[m] * blk)
         sign = schedule.sign(np.arange(n) * dt)[None, :, None]
-        return G, dt, schedule, sign, te, te_min
+        return G, dt, schedule, sign
+
+    def spans_of(g):
+        return np.array([float(span(m, g[m])) for m in range(n_m)])
+
+    def _build(g, amp):
+        te_min = assembler.te_min(spans_of(g), g)
+        te = te_min if TE is None else float(TE)
+        if te < te_min - _EPS_T:
+            raise ValueError(f"TE = {te*1e3:.3f} ms is below the {te_min*1e3:.3f} ms this encoding needs "
+                             f"(its blocks, their gap and the pulse / readout windows)")
+        n = int(n_t) if not hasattr(assembler, "n_t_of") else assembler.n_t_of(n_t)
+        if TE is not None or square or hasattr(assembler, "n_t_of"):
+            return (*_lay(g, amp, te, n, whole=False), te, te_min)
+        for k in range(min(_ROOM_STEPS, n - 3) + 1):
+            te_k = te_min if k == 0 else te_min * (n - 1) / (n - 1 - k)
+            try:
+                return (*_lay(g, amp, te_k, n, whole=True), te_k, te_min)
+            except _NoRoom as e:
+                last = e
+        raise ValueError(f"the encoding blocks do not fit whole on the {n}-sample grid within {_ROOM_STEPS} steps "
+                         f"of TE = {te_min*1e3:.4f} ms ({last}): give TE, or a finer grid (n_t)")
 
     if b_target is None:
         G, dt, schedule, sign, te, te_min = _build(g, g)
@@ -494,24 +610,36 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
         G, dt, schedule, sign, te, te_min = _build(np.zeros(n_m), np.ones(n_m))   # square unit blocks seed the amplitude
         b_unit = b_from_gradient(G * sign, dt)
         g = np.where((b_target > 0) & (b_unit > 0), np.sqrt(b_target / np.where(b_unit > 0, b_unit, 1.0)), 0.0)
-        for _ in range(_B_ITER):                                      # the ramps follow the amplitude
-            G, dt, schedule, sign, te, te_min = _build(g, g)
-            b_num = b_from_gradient(G * sign, dt)
+        # The ramps follow the amplitude. The declared b IS the numeric b of the effective gradient the walk
+        # integrates, so the sequence returned is the last build scaled to the target b; that build is the last
+        # one whose scale does not raise any row above the amplitude its ramps were made for (a ramp of g / slew
+        # played at a higher amplitude would step faster than the slew). Where the iteration settles this is the
+        # last build; where a block's sample count or the automatic TE flips between two builds it is the one
+        # of the two that scales down.
+        kept = None
+        for _ in range(_B_ITER):
+            built = _build(g, g)
+            b_num = b_from_gradient(built[0] * built[3], built[1])
             live = (b_target > 0) & (b_num > 0)
             scale = np.where(live, np.sqrt(b_target / np.where(b_num > 0, b_num, 1.0)), 1.0)
+            if np.all(scale <= 1.0 + _B_RTOL):
+                kept = (built, g, scale)
             g = g * scale
             if np.all(np.abs(scale - 1.0) < _B_RTOL):
                 break
-        # the declared b IS the numeric b of the effective gradient the walk integrates
-        b_num = b_from_gradient(G * sign, dt)
-        live = (b_target > 0) & (b_num > 0)
-        scale = np.where(live, np.sqrt(b_target / np.where(b_num > 0, b_num, 1.0)), 1.0)
+        if kept is None:
+            raise ValueError(f"the amplitude for b = {b_target.tolist()} did not settle in {_B_ITER} builds at a "
+                             f"scale that keeps the ramps within the slew limit")
+        (G, dt, schedule, sign, te, te_min), g, scale = kept
         G = G * scale[:, None, None]
         g = g * scale
     b_out = b_from_gradient(G * sign, dt) if b_target is None else b_target
     extra = {} if encoding is None else dict(encoding(g, te, te_min))
-    q = None if q_width is None else q_from_g(g, np.broadcast_to(np.asarray(q_width, np.float64), (n_m,)))
+    q = _first_lobe_q(G, dirs, dt) if state_q else None
     enc = Encoding(bvalues=b_out, gradient_directions=dirs, TE=np.full(n_m, te), qvalues=q, gradient_strengths=g,
                    minimum_te=te_min, te_auto=TE is None, **extra)
-    return ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, family=family, encoding=enc,
-                           build_spec=build_spec).validate()
+    seq = ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, family=family, encoding=enc,
+                          build_spec=build_spec)
+    if not square:
+        seq.check_slew(slew)
+    return seq.validate()

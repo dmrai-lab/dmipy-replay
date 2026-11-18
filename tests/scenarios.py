@@ -1,7 +1,10 @@
 """The parity battery: every replay route this package serves, written once against a namespace so that the same
-scenario ran on dmipy-sim ``8d7b97f`` (its numbers are ``data/reference.json``, a frozen record) and on dmipy-replay (``test_parity.py``
-compares). A scenario is ``(name, pack, fn)`` with ``fn(ns, pack) -> ndarray``; ``ns`` carries the builders and
-``Tissue`` of whichever package runs it.
+scenario runs on dmipy-sim and on dmipy-replay (``test_parity.py`` compares). A scenario is ``(name, pack, fn)`` with
+``fn(ns, pack) -> ndarray``; ``ns`` carries the builders and ``Tissue`` of whichever package runs it.
+
+Its record (``data/reference.json``, ``data/reference.npz``) is dmipy-sim ``8d7b97f``'s numbers, frozen, for every
+scenario but those named under ``client_scenarios``: these build a ramped sequence that this client lays out with
+every mid-step sample inside each lobe's span (held to its slew), so their numbers are this client's own.
 """
 import numpy as np
 

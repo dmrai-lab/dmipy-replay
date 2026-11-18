@@ -5,6 +5,14 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **Every builder plays within the slew it is given.** At a finite `slew_rate` no step of a built sequence's played
+  gradient, on any axis, exceeds the slew (`ScannerSequence.check_slew` refuses one that does, `ScannerSequence.peak_slew`
+  reports the steps; every builder applies the check): a ramped lobe keeps every sample whose mid-step lies inside its
+  span, a train of lobes is one sampled waveform, and a self-refocusing pair is a lobe and its exact negative starting on
+  the first step after the first lobe's ideal end. A ramped lobe's area is its ideal area to within
+  `min(1, dt / (4 eps)) g dt`; `Encoding.qvalues` is `gamma / (2 pi)` times the area of each row's first built lobe
+  (`assemble(state_q=)` in place of `q_width=`); an automatic `TE` is the schedule's floor extended by the fewest whole
+  steps at which every block fits whole. The square limit (`slew_rate=np.inf`) is unchanged.
 - **The `bound` column is read** (RPK.md 5.3, 6.5, 8.8). A pack that carries the C1 `bound` occupancy column is replayed with
   the joint occupancy `f_bound = b`, `f_g = (1 - b) [comp = g]` and the rate `R(t) = sum_c f_c(t) R_c`, exact over the runs of
   both columns, by `ReplayPack.replay`, `walker_signals`, `walker_phases`, the study route (`walker_primitives` holds one

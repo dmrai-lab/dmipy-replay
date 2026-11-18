@@ -1,5 +1,11 @@
-"""Every scenario of ``scenarios.py`` replayed here against dmipy-sim's own replay of the same pack
-(``data/reference.json``, recorded at dmipy-sim ``8d7b97f`` and frozen): the code is the same code, so the numbers are the same to rounding."""
+"""Every scenario of ``scenarios.py`` replayed here against its record (``data/reference.json``, ``data/reference.npz``).
+
+The record is dmipy-sim's own replay of the same pack, taken at dmipy-sim ``8d7b97f`` and frozen, for every scenario
+except those listed under ``client_scenarios``: the code is the same code, so the numbers are the same to rounding. The
+scenarios under ``client_scenarios`` build a ramped sequence whose samples this client's builders lay out differently
+from the sim's at that commit (every sample whose mid-step lies inside a ramped lobe's span is kept, so no step exceeds
+the slew); their record is this client's replay of its own sequences, so for them the test holds the client to itself,
+not to the sim."""
 import json
 from pathlib import Path
 from types import SimpleNamespace

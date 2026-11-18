@@ -163,6 +163,27 @@ def g03_pose_quadrature(api):
     return out
 
 
+def _ramped_pgse(api, T, dirs, g, slew=200.0, n_t=1000):
+    """A PGSE with ramps of ``g / slew`` inside a window of ``T`` seconds (lobes of ``T/5`` at ``T/2`` apart, the echo at
+    ``0.95 T``), its samples written out here so that both spellings replay the same ones: each lobe is ``floor((delta
+    + eps) / dt)`` samples of the ideal trapezoid at mid-step, the first ending on the last step before its edge of the
+    180's gap, the second starting on the first step after the other. The schedule is the square PGSE's."""
+    delta, Delta, TE = 0.2 * T, 0.5 * T, 0.95 * T
+    sq = api.pgse([list(d) for d in dirs], delta, Delta, gradient_strengths=list(g), TE=TE, n_t=n_t, slew_rate=np.inf)
+    dt = TE / (n_t - 1)
+    G = np.zeros((len(dirs), n_t, 3))
+    for m, (d, gm) in enumerate(zip(dirs, g)):
+        eps = gm / slew
+        t = (np.arange(int(np.floor((delta + eps) / dt + 1e-9))) + 0.5) * dt
+        lobe = np.where(t < eps, t / eps, np.where(t >= delta, np.clip((delta + eps - t) / eps, 0.0, 1.0), 1.0))
+        gap = Delta - delta - eps
+        i1 = int(np.floor((TE / 2 - gap / 2) / dt + 1e-9)) - len(lobe)
+        i2 = int(np.ceil((TE / 2 + gap / 2) / dt - 1e-9))
+        for i0 in (i1, i2):
+            G[m, i0:i0 + len(lobe)] += gm * lobe[:, None] * np.asarray(d, float)
+    return api.ScannerSequence(G=G, dt=sq.dt, rf=sq.rf, readout=sq.readout)
+
+
 def _classes(api, seq):
     """Three encoding classes of one timing class: ``seq``, its rows at 0.8 of their amplitude, and its rows turned."""
     from dmipy_replay.acquisition.waveforms import rotate_waveform
@@ -179,7 +200,7 @@ def g04_pose_batch_series(api):
     out = {}
     for i, r in enumerate(pk.pose_responses(seqs, backend=api.DEFAULTS["pose"])):
         out.update({f"batch/{i}/{k}": v for k, v in _response(r).items()})
-    seq = api.pgse([[0, 0, 1], [1, 0, 0]], 0.2 * T, 0.5 * T, gradient_strengths=[0.05, 0.03], TE=0.95 * T, slew_rate=200.0)
+    seq = _ramped_pgse(api, T, [[0, 0, 1], [1, 0, 0]], [0.05, 0.03])
     series = pk.pose_series(_classes(api, seq), backend=api.DEFAULTS["pose"])
     out["series/bounds"] = series.bounds
     for i, r in enumerate(series.responses()):
@@ -188,8 +209,7 @@ def g04_pose_batch_series(api):
     for i, r in enumerate(series.responses()):
         out.update({f"series_torch/{i}/{k}": v for k, v in _response(r).items()})
     fp = _pack(api, "field")
-    seq = api.pgse([[0, 0, 1]], 0.2 * fp.T_window, 0.5 * fp.T_window, gradient_strengths=[0.05], TE=0.95 * fp.T_window,
-                   slew_rate=200.0)
+    seq = _ramped_pgse(api, fp.T_window, [[0, 0, 1]], [0.05])
     series = fp.pose_series(_classes(api, seq), tissue=api.Tissue(chi_iso=-1e-7, chi_aniso=-5e-8), scanner=3.0,
                             backend=api.DEFAULTS["pose"])
     out["field_series/bounds"] = series.bounds
