@@ -114,10 +114,14 @@ def concomitant_terms(G, position_m, B0_T, b0_axis=(0.0, 0.0, 1.0)):
 class Encoding:
     """The per-measurement encoding an analytical layer reads: what the gradient means, not what it is.
 
-    ``bvalues`` (s/m^2), ``gradient_directions`` (unit vectors), ``TE`` (s) per measurement; ``qvalues``,
+    ``bvalues`` (s/m^2), ``gradient_directions`` (unit vectors), ``TE`` (s) per measurement; ``qvalues`` (1/m), on a
+    built sequence the largest ``|q(t)|`` its effective gradient reaches along the measurement's direction (a pulsed
+    pair's lobe area, one lobe's of an oscillating train, a quarter period's of a cosine, as built), on
+    :func:`~dmipy_replay.sequences.builders.from_waveform` the square PGSE's of the same b, ``delta``, ``Delta``;
     ``gradient_strengths``, ``delta``, ``Delta`` where the family defines them; the family's own parameters
     (``oscillation_frequency`` ... ``cpmg_n_echoes``); and ``minimum_te`` / ``te_auto``, the echo time floor
-    the gradient schedule sets and whether ``TE`` was left to it.
+    the gradient schedule sets (in continuous time) and whether ``TE`` was left to it; a ``TE`` left to a builder at a
+    finite slew is that floor extended by the fewest whole steps of its grid at which every block fits whole.
     """
     bvalues: np.ndarray
     gradient_directions: np.ndarray

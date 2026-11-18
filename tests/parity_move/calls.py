@@ -164,10 +164,12 @@ def g03_pose_quadrature(api):
 
 
 def _ramped_pgse(api, T, dirs, g, slew=200.0, n_t=1000):
-    """A PGSE with ramps of ``g / slew`` inside a window of ``T`` seconds (lobes of ``T/5`` at ``T/2`` apart, the echo at
-    ``0.95 T``), its samples written out here so that both spellings replay the same ones: each lobe is ``floor((delta
-    + eps) / dt)`` samples of the ideal trapezoid at mid-step, the first ending on the last step before its edge of the
-    180's gap, the second starting on the first step after the other. The schedule is the square PGSE's."""
+    """A RECORDED waveform, not a built sequence: the samples a PGSE with ramps of ``g / slew`` (lobes of ``T/5`` at
+    ``T/2`` apart, the echo at ``0.95 T``) had when the builders kept ``floor((delta + eps) / dt)`` samples of each lobe,
+    the first lobe ending on the last step before its edge of the 180's gap and the second starting on the first step
+    after the other. Its last ramp sample drops to zero in one step, so it steps past the slew it names; the builders
+    no longer play it. It is written out here, with the square PGSE's schedule, so that both spellings replay the same
+    samples and the move's recorded values (the pose series of group g04) compare like with like."""
     delta, Delta, TE = 0.2 * T, 0.5 * T, 0.95 * T
     sq = api.pgse([list(d) for d in dirs], delta, Delta, gradient_strengths=list(g), TE=TE, n_t=n_t, slew_rate=np.inf)
     dt = TE / (n_t - 1)

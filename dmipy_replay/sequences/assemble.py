@@ -479,22 +479,17 @@ def _place(G, m, i0, block):
     G[m, i0:i0 + n] += block
 
 
-def _first_lobe_q(G, dirs, dt):
-    """``(n_m,)`` 1/m: ``gamma / (2 pi)`` times the area of each row's first lobe along its unit direction -- the
-    samples from the first nonzero one up to the first that is zero or of the other sign, times ``dt``."""
-    q = np.zeros(G.shape[0])
-    for m in range(G.shape[0]):
+def _peak_q(G_eff, dirs, dt):
+    """``(n_m,)`` 1/m: each row's q, the largest ``|q(t)|`` its built effective gradient reaches along the row's unit
+    direction, ``q(t) = gamma / (2 pi) * sum_{k <= t / dt} G_eff[k] . d * dt`` -- a pulsed pair's lobe area, one lobe's
+    of an oscillating train, a quarter period's of a cosine, each as built."""
+    q = np.zeros(G_eff.shape[0])
+    for m in range(G_eff.shape[0]):
         norm = float(np.linalg.norm(dirs[m]))
         if norm == 0.0:
             continue
-        s = G[m] @ (dirs[m] / norm)
-        nz = np.flatnonzero(s)
-        if nz.size == 0:
-            continue
-        i0 = int(nz[0])
-        same = np.sign(s[i0:]) == np.sign(s[i0])
-        i1 = i0 + (int(np.argmin(same)) if not np.all(same) else same.size)
-        q[m] = abs(float(np.sum(s[i0:i1]))) * dt * GAMMA / (2.0 * np.pi)
+        run = np.cumsum(G_eff[m] @ (dirs[m] / norm)) * dt
+        q[m] = float(np.abs(run).max()) * GAMMA / (2.0 * np.pi)
     return q
 
 
@@ -510,8 +505,9 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     ``span(m, g)`` is row ``m``'s block duration at amplitude ``g``; ``sample(m, g, dt)`` its unit block, ``(n,)``
     along the row's direction or ``(n, 3)``; ``fill(m, g, dt, n)`` a unit block of ``n`` samples for an assembler
     that hands out stretches to fill (the echo train). Exactly one of ``bvalues`` / ``gradient_strengths`` sets
-    the amplitude; ``encoding(g, TE, te_min)`` returns the family's extra ``Encoding`` fields; ``state_q`` states
-    ``Encoding.qvalues``, ``gamma / (2 pi)`` times the area of each row's first built lobe.
+    the amplitude; ``encoding(g, TE, te_min)`` returns the family's extra ``Encoding`` fields, ``g`` the amplitude the ramps were
+    built for; ``state_q`` states
+    ``Encoding.qvalues``, the largest ``|q(t)|`` each row's built effective gradient reaches along its direction.
 
     ``slew_rate`` is the limit the shapes' ramps were built for. When it is finite the returned sequence is
     checked against it (:meth:`ScannerSequence.check_slew`), and an automatic ``TE`` (``TE=None``, on an assembler
@@ -519,6 +515,11 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     grid, ``TE = te_min (n_t - 1) / (n_t - 1 - k)``, at which every block is placed whole (a ramped block keeps
     every sample inside its span, so it can be one step longer than the floor's room); ``Encoding.minimum_te``
     is that floor.
+
+    With ``bvalues`` the amplitude is iterated (up to ``_B_ITER`` builds, until the b-scale is within ``_B_RTOL`` of 1)
+    and the sequence returned is the last build whose final scale to the target b does not exceed ``1 + _B_RTOL`` on
+    any row, scaled: its ramps were made for an amplitude at least the one it plays, so it holds the slew, and its b
+    is the target. ``Encoding`` states that build's ramps.
     """
     dirs = np.asarray(gradient_directions, dtype=np.float64)
     if dirs.ndim == 1:
@@ -606,6 +607,7 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
 
     if b_target is None:
         G, dt, schedule, sign, te, te_min = _build(g, g)
+        g_ramp = g
     else:
         G, dt, schedule, sign, te, te_min = _build(np.zeros(n_m), np.ones(n_m))   # square unit blocks seed the amplitude
         b_unit = b_from_gradient(G * sign, dt)
@@ -630,12 +632,12 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
         if kept is None:
             raise ValueError(f"the amplitude for b = {b_target.tolist()} did not settle in {_B_ITER} builds at a "
                              f"scale that keeps the ramps within the slew limit")
-        (G, dt, schedule, sign, te, te_min), g, scale = kept
+        (G, dt, schedule, sign, te, te_min), g_ramp, scale = kept
         G = G * scale[:, None, None]
-        g = g * scale
+        g = g_ramp * scale
     b_out = b_from_gradient(G * sign, dt) if b_target is None else b_target
-    extra = {} if encoding is None else dict(encoding(g, te, te_min))
-    q = _first_lobe_q(G, dirs, dt) if state_q else None
+    extra = {} if encoding is None else dict(encoding(g_ramp, te, te_min))     # the ramps as played: g_ramp / slew
+    q = _peak_q(G * sign, dirs, dt) if state_q else None
     enc = Encoding(bvalues=b_out, gradient_directions=dirs, TE=np.full(n_m, te), qvalues=q, gradient_strengths=g,
                    minimum_te=te_min, te_auto=TE is None, **extra)
     seq = ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, family=family, encoding=enc,
