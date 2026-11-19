@@ -57,7 +57,7 @@ from ..acquisition.waveforms import b_from_gradient
 
 __all__ = ["trapezoid", "trapezoid_train", "cosine", "bipolar", "axis_pairs",
            "SpinEcho", "StimulatedEcho", "GradientEcho", "EchoTrain", "PreparedEchoTrain",
-           "assemble", "ramp_of"]
+           "assemble", "ramp_of", "pair_timings"]
 
 _B_ITER = 16          # amplitude iterations (the ramps depend on the amplitude)
 _B_RTOL = 1e-10
@@ -497,9 +497,59 @@ def _peak_q(G_eff, dirs, dt):
 _ROOM_STEPS = 8
 
 
+def _lobes_along(g):
+    """The lobes of one row's gradient along its direction, ``g`` ``(n_t,)``: the maximal runs of non-zero samples of
+    one sign, as ``[(i0, i1), ...]`` sample indices (``g[i0:i1]``)."""
+    s = np.sign(g)
+    out, i, n = [], 0, len(g)
+    while i < n:
+        if s[i] == 0:
+            i += 1; continue
+        j = i + 1
+        while j < n and s[j] == s[i]:
+            j += 1
+        out.append((i, j)); i = j
+    return out
+
+
+def pair_timings(G_eff, dirs, dt):
+    """``(delta_built, Delta_built)``, each ``(n_m,)`` seconds: each row's pulsed pair as built, read off the samples of
+    its effective gradient along the row's direction, ``g[k] = G_eff[k] . d`` held over ``[k dt, (k + 1) dt)`` and
+    taken as the value at ``k dt`` between samples. A lobe is a maximal run of non-zero samples of one sign; the pair is
+    the row's FIRST TWO lobes; each lobe's edges are where ``|g|`` crosses half that lobe's peak, by linear
+    interpolation between the two samples about the crossing. ``delta_built`` is the mean of the two lobes'
+    half-amplitude widths, ``Delta_built`` the separation of their centres (centre to centre). NaN on a row with fewer
+    than two lobes (a b = 0 row, a zero direction)."""
+    G_eff = np.asarray(G_eff, np.float64)
+    n_m = G_eff.shape[0]
+    width, sep = np.full(n_m, np.nan), np.full(n_m, np.nan)
+    for m in range(n_m):
+        norm = float(np.linalg.norm(dirs[m]))
+        if norm == 0.0:
+            continue
+        g = G_eff[m] @ (np.asarray(dirs[m], np.float64) / norm)
+        lobes = _lobes_along(g)
+        if len(lobes) < 2:
+            continue
+        a = np.concatenate([[0.0], np.abs(g), [0.0]])                     # the gradient off before and after the grid
+        edges = []
+        for i0, i1 in lobes[:2]:
+            run = a[i0 + 1:i1 + 1]
+            h = 0.5 * run.max()
+            up = i0 + int(np.argmax(run >= h))                            # first sample at or above half: index into g
+            dn = i0 + len(run) - 1 - int(np.argmax(run[::-1] >= h))       # last one
+            t_up = (up - 1 + (h - a[up]) / (a[up + 1] - a[up])) * dt      # between g[up - 1] (a[up]) and g[up]
+            t_dn = (dn + (a[dn + 1] - h) / (a[dn + 1] - a[dn + 2])) * dt  # between g[dn] (a[dn + 1]) and g[dn + 1]
+            edges.append((t_up, t_dn))
+        (u1, d1), (u2, d2) = edges
+        width[m] = 0.5 * ((d1 - u1) + (d2 - u2))
+        sep[m] = 0.5 * (u2 + d2) - 0.5 * (u1 + d1)
+    return width, sep
+
+
 def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_strengths=None, sample=None,
              fill=None, TE=None, n_t=1000, slew_rate=np.inf, family, build_spec, encoding=None, state_q=False,
-             timing=None):
+             state_pair=False, timing=None):
     """Build a validated :class:`ScannerSequence` from an assembler and a shape.
 
     ``span(m, g)`` is row ``m``'s block duration at amplitude ``g``; ``sample(m, g, dt)`` its unit block, ``(n,)``
@@ -507,7 +557,9 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     that hands out stretches to fill (the echo train). Exactly one of ``bvalues`` / ``gradient_strengths`` sets
     the amplitude; ``encoding(g, TE, te_min)`` returns the family's extra ``Encoding`` fields, ``g`` the amplitude the ramps were
     built for; ``state_q`` states
-    ``Encoding.qvalues``, the largest ``|q(t)|`` each row's built effective gradient reaches along its direction.
+    ``Encoding.qvalues``, the largest ``|q(t)|`` each row's built effective gradient reaches along its direction;
+    ``state_pair`` states ``Encoding.delta_built`` and ``Encoding.Delta_built``, the pulsed pair as built
+    (:func:`pair_timings`), for a family whose encoding is one pair of lobes.
 
     ``slew_rate`` is the limit the shapes' ramps were built for. When it is finite the returned sequence is
     checked against it (:meth:`ScannerSequence.check_slew`), and an automatic ``TE`` (``TE=None``, on an assembler
@@ -638,6 +690,9 @@ def assemble(assembler, *, gradient_directions, span, bvalues=None, gradient_str
     b_out = b_from_gradient(G * sign, dt) if b_target is None else b_target
     extra = {} if encoding is None else dict(encoding(g_ramp, te, te_min))     # the ramps as played: g_ramp / slew
     q = _peak_q(G * sign, dirs, dt) if state_q else None
+    if state_pair:
+        stored = np.asarray(G, np.float32).astype(np.float64)           # the samples the sequence holds (float32)
+        extra["delta_built"], extra["Delta_built"] = pair_timings(stored * sign, dirs, dt)
     enc = Encoding(bvalues=b_out, gradient_directions=dirs, TE=np.full(n_m, te), qvalues=q, gradient_strengths=g,
                    minimum_te=te_min, te_auto=TE is None, **extra)
     seq = ScannerSequence(G=G, dt=dt, rf=schedule, timing=timing, family=family, encoding=enc,

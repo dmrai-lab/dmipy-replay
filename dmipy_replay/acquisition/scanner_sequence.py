@@ -122,6 +122,17 @@ class Encoding:
     (``oscillation_frequency`` ... ``cpmg_n_echoes``); and ``minimum_te`` / ``te_auto``, the echo time floor
     the gradient schedule sets (in continuous time) and whether ``TE`` was left to it; a ``TE`` left to a builder at a
     finite slew is that floor extended by the fewest whole steps of its grid at which every block fits whole.
+
+    ``delta`` and ``Delta`` are NOMINAL: the timings the builder was asked for (PGSE: the half-amplitude width and the
+    centre-to-centre separation it lays out; PGSTE: ``Delta = delta + TM``, the lobe width plus the mixing time, the
+    stimulated echo's edge-to-edge convention). ``delta_built`` and ``Delta_built`` (seconds per measurement) are the
+    pair as BUILT, read off the built effective gradient's samples
+    (:func:`~dmipy_replay.sequences.assemble.pair_timings`: the mean half-amplitude width of the first two lobes and
+    the separation of their centres, by linear interpolation at half each lobe's peak); they differ from the nominal
+    ones where the grid moves a lobe (a ``TE`` extended by whole steps starts the second lobe later) and, for PGSTE,
+    by the convention (centre to centre against ``delta + TM``). They are stated for ``pgse`` and ``pgste`` (NaN on
+    a row with no pair, a b = 0 row); None on every other family and on ``from_waveform``, whose ``delta`` /
+    ``Delta`` name a block, a half period, a bipolar pair or a train rather than one pair of lobes.
     """
     bvalues: np.ndarray
     gradient_directions: np.ndarray
@@ -130,6 +141,8 @@ class Encoding:
     gradient_strengths: np.ndarray = None
     delta: np.ndarray = None
     Delta: np.ndarray = None
+    delta_built: np.ndarray = None
+    Delta_built: np.ndarray = None
     minimum_te: float = None
     te_auto: bool = False
     tau_perp_SE: np.ndarray = None
@@ -154,7 +167,7 @@ class Encoding:
     def __post_init__(self):
         object.__setattr__(self, "bvalues", np.asarray(self.bvalues, dtype=np.float64))
         object.__setattr__(self, "gradient_directions", np.asarray(self.gradient_directions, dtype=np.float64))
-        for k in ("TE", "qvalues", "gradient_strengths", "delta", "Delta", "tau_perp_SE", "ramp_time",
+        for k in ("TE", "qvalues", "gradient_strengths", "delta", "Delta", "delta_built", "Delta_built", "tau_perp_SE", "ramp_time",
                   "oscillation_frequency", "gradient_rise_time", "n_oscillation_cycles", "gradient_duration"):
             v = getattr(self, k)
             if v is not None:

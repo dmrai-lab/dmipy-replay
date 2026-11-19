@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **A built pulsed pair states the timings it plays.** `Encoding.delta_built` and `Encoding.Delta_built` (seconds per
+  measurement) of a `pgse` or `pgste` sequence are its pair as built, read off the stored samples of the effective
+  gradient (`sequences.assemble.pair_timings`): the mean half-amplitude width of the first two lobes and the separation
+  of their centres, by linear interpolation at half each lobe's peak; NaN on a row with no pair. `Encoding.delta` and
+  `Encoding.Delta` are the nominal timings the builder was asked for, unchanged (`pgste`: `Delta = delta + TM`, edge to
+  edge). Every other family, and `from_waveform`, states None for the built pair.
 - **The time-segment read path refuses a waveform the stated slew cannot play.** `TimeSegmentLayout.fit`, `image` and
   `delivery` refuse a sequence whose played gradient steps faster than the slew limit they are given, by
   `ScannerSequence.check_slew` (the measurement, the axis, the step and the limit named). The limit is the call's
