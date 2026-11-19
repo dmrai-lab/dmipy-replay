@@ -26,7 +26,9 @@ def replay_bloch_jax(trajectory, h, G, dt_wf, rf_events, *,
 
     Same arguments (``comp_traj`` ``(n_w, n_pieces, n_pools)`` and ``bound_frac`` ``(n_w, n_pieces)`` the occupancies of each
     piece, as in the reference), same per-piece operator and same outputs as the numpy reference. Arithmetic is float32 on
-    the device, so signals agree with the reference to about 1e-5 of the phase scale. Each measurement needs
+    the device, so signals agree with the reference to about 1e-5 of the phase scale. Its longitudinal model is the
+    reference's: ``M_z`` decays by ``exp(-dt / T1)`` per piece with no recovery toward equilibrium
+    (:mod:`~dmipy_replay.replay.bloch` states what it omits on which reads). Each measurement needs
     an ``(n_pieces, n_w)`` float32 phase table on the device; measurements are batched so that the tables of one
     batch stay within ``phase_table_bytes``, and a single measurement whose table exceeds it runs alone.
     """

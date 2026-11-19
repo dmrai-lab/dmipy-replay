@@ -88,7 +88,7 @@ def pgse(gradient_directions, delta, Delta, *, bvalues=None, gradient_strengths=
     return assemble(
         SpinEcho(gap=lambda m, g: Delta_[m] - delta_[m] - eps(m, g), timing=timing),
         gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE, n_t=n_t,
-        slew_rate=slew_rate, timing=timing, family='pgse', state_q=True,
+        slew_rate=slew_rate, timing=timing, family='pgse', state_q=True, state_pair=True,
         span=lambda m, g: delta_[m] + eps(m, g),
         sample=lambda m, g, dt: trapezoid(delta_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(delta=delta_, Delta=Delta_, ramp_time=np.array([eps(m, g[m]) for m in range(n_m)])),
@@ -180,7 +180,7 @@ def pgste(gradient_directions, delta, TM, *, bvalues=None, gradient_strengths=No
     return assemble(
         StimulatedEcho(TM, flips=ste_flip_angles, timing=timing),
         gradient_directions=dirs, bvalues=bvalues, gradient_strengths=gradient_strengths, TE=TE, n_t=n_t,
-        slew_rate=slew_rate, timing=timing, family='pgste', state_q=True,
+        slew_rate=slew_rate, timing=timing, family='pgste', state_q=True, state_pair=True,
         span=lambda m, g: delta_[m] + eps(m, g),
         sample=lambda m, g, dt: trapezoid(delta_[m], eps(m, g), dt),
         encoding=lambda g, te, te_min: dict(delta=delta_, Delta=delta_ + TM, tau_perp_SE=np.full(n_m, te - TM),

@@ -5,6 +5,25 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **The Bloch route states its longitudinal model.** `replay_bloch` (numpy and JAX) multiplies each walker's `M_z` by
+  `exp(-dt / T1)` per piece, the MT bound pool's by `exp(-dt / T1_bound)`, and adds no recovery toward equilibrium;
+  a walker starts at equilibrium. Its docstrings say so and state the size of the omitted recovery on the reads it
+  was measured on: none on an ideal 90-180 spin echo; about 1e-2 on an unencoded stimulated echo and from about 2e-4
+  to 7e-3 on an encoded one, depending on how far the walkers are spread; the whole signal on a repeated excitation
+  train.
+- **A built pulsed pair states the timings it plays.** `Encoding.delta_built` and `Encoding.Delta_built` (seconds per
+  measurement) of a `pgse` or `pgste` sequence are its pair as built, read off the stored samples of the effective
+  gradient (`sequences.assemble.pair_timings`): the mean half-amplitude width of the first two lobes and the separation
+  of their centres, by linear interpolation at half each lobe's peak; NaN on a row with no pair. `Encoding.delta` and
+  `Encoding.Delta` are the nominal timings the builder was asked for, unchanged (`pgste`: `Delta = delta + TM`, edge to
+  edge). Every other family, and `from_waveform`, states None for the built pair.
+- **The time-segment read path refuses a waveform the stated slew cannot play.** `TimeSegmentLayout.fit`, `image` and
+  `delivery` refuse a sequence whose played gradient steps faster than the slew limit they are given, by
+  `ScannerSequence.check_slew` (the measurement, the axis, the step and the limit named). The limit is the call's
+  `slew_max=` (T/m/s, one value or one per axis), else, for `delivery`, its scanner's `ScannerLimits.slew_max`, else the
+  layout manifest's `source.envelope["slew_max"]`; with none stated no slew is checked. A delivery given a scanner now
+  refuses a waveform that scanner's slew cannot play (a square pulse, for example); an idealised waveform is delivered
+  by stating limits without a slew, `dataclasses.replace(limits, slew_max=None)`.
 - **Every builder plays within the slew it is given.** At a finite `slew_rate` no step of a built sequence's played
   gradient, on any axis, exceeds the slew (`ScannerSequence.check_slew` refuses one that does, `ScannerSequence.peak_slew`
   reports the steps; every builder applies the check), for every ramp length, a ramp shorter than one step included:
