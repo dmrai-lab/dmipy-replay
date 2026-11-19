@@ -5,13 +5,25 @@ train's coherence pathways, an MT bound pool (RPK.md 6.5, ACQUISITION.md 7.2).
 
 **The longitudinal model.** Over each piece of the walk a walker's ``M_z`` is multiplied by ``exp(-dt / T1)`` (per
 pool; the MT bound pool's ``T1_bound`` likewise): it DECAYS and does not recover toward equilibrium. The walker starts
-at equilibrium, ``M = (0, 0, 1)``. A read is exact under this model when no longitudinal magnetisation regrown during
-the sequence would reach the signal: an ideal 90-180 spin echo is (its pulses never tip ``M_z`` into the transverse
-plane; against the closed form with recovery, T1 1 s, T2 80 ms, TE 50 ms: a relative difference of 8e-15). A pulse
-that tips the longitudinal magnetisation back is outside the model: a stimulated echo's recall (hard 90-90-90 with the
-store 5 ms after the excitation, TM 10 ms, no gradient, T1 1 s: 1.1e-2 relative) and a train of repeated excitations
-(20 pulses of 60 degrees at TR 100 ms, T1 1 s: the route's signal decays to 2e-7 where the recovering one holds
-0.123). The recovering propagator of a single pulse is :func:`~dmipy_replay.acquisition.rf.bloch_simulate`.
+at equilibrium, ``M = (0, 0, 1)``. What the model omits is the magnetisation regrown along z, ``(1 - exp(-t / T1))``
+of equilibrium over a time ``t``; it reaches the signal only through a later pulse that tips it into the transverse
+plane, and then only as far as the gradient after that pulse leaves it in phase. Measured against the same operator
+with the recovery added (T1 1 s, T2 80 ms, relative to the read):
+
+* an ideal 90-180 spin echo (hard pulses, no gradient, TE 50 ms): 8e-15; the 180 never tips ``M_z`` into the
+  transverse plane, so the read is exact under the model;
+* a stimulated echo, hard 90-90-90 with the store 5 ms after the excitation, TM 10 ms, no gradient, every walker at
+  one point: 1.1e-2; nothing dephases the regrown part, which adds to the echo coherently;
+* the encoded stimulated echo of ``pgste`` (delta 4 ms, TM 10 ms, slew 200 T/m/s, ``n_t`` 1000), 4000 freely diffusing
+  walkers (D 2e-9 m^2/s): at b = 0 1.1e-2 (as above); at b 1e8 / 1e9 s/m^2, 1.0e-2 / 6.8e-3 with every walker starting
+  at one point, 2.3e-3 / 3.6e-4 started across a 100 um cube, 1.9e-4 / 1.5e-3 across a 1 mm cube. The regrown part
+  sees only the second lobe, so it dephases over spread walkers but not completely: what remains is of the order of
+  the ensemble's own dephasing residue, ``(1 - exp(-TM / T1)) / sqrt(n_walkers)`` of equilibrium, so no encoded read
+  of these is within 1e-6;
+* a train of repeated excitations (20 pulses of 60 degrees at TR 100 ms, no gradient): the route's signal decays to
+  2e-7 where the recovering one holds 0.123.
+
+The recovering propagator of a single pulse is :func:`~dmipy_replay.acquisition.rf.bloch_simulate`.
 """
 
 from typing import NamedTuple
@@ -288,8 +300,9 @@ def replay_bloch(trajectory, h, G, dt_wf, rf_events, *,
     forms by itself. **Pass the PHYSICAL (same-sign-lobe) gradient** (``ScannerSequence.G``, on its own grid).
 
     The longitudinal magnetisation decays by ``exp(-dt / T1)`` per piece and does not recover toward equilibrium (the
-    module docstring states which reads that covers: an ideal 90-180 spin echo, not a stimulated echo's recall nor
-    a repeated excitation train); a walker starts at equilibrium unless ``M_init`` says otherwise.
+    module docstring states the size of the omitted recovery on the reads it was measured on: none on an ideal 90-180
+    spin echo, up to 1e-2 on a stimulated echo, the whole signal on a repeated excitation train); a walker starts at
+    equilibrium unless ``M_init`` says otherwise.
 
     Parameters
     ----------

@@ -517,7 +517,8 @@ def pair_timings(G_eff, dirs, dt):
     its effective gradient along the row's direction, ``g[k] = G_eff[k] . d`` held over ``[k dt, (k + 1) dt)`` and
     taken as the value at ``k dt`` between samples. A lobe is a maximal run of non-zero samples of one sign; the pair is
     the row's FIRST TWO lobes; each lobe's edges are where ``|g|`` crosses half that lobe's peak, by linear
-    interpolation between the two samples about the crossing. ``delta_built`` is the mean of the two lobes'
+    interpolation of ``g`` between the two samples about the crossing (a neighbouring sample of the opposite sign
+    included: the line through zero between them). ``delta_built`` is the mean of the two lobes'
     half-amplitude widths, ``Delta_built`` the separation of their centres (centre to centre). NaN on a row with fewer
     than two lobes (a b = 0 row, a zero direction)."""
     G_eff = np.asarray(G_eff, np.float64)
@@ -531,9 +532,10 @@ def pair_timings(G_eff, dirs, dt):
         lobes = _lobes_along(g)
         if len(lobes) < 2:
             continue
-        a = np.concatenate([[0.0], np.abs(g), [0.0]])                     # the gradient off before and after the grid
         edges = []
         for i0, i1 in lobes[:2]:
+            # g in the lobe's own sign, off before and after the grid: a neighbour of the opposite sign is negative
+            a = np.concatenate([[0.0], np.sign(g[i0]) * g, [0.0]])
             run = a[i0 + 1:i1 + 1]
             h = 0.5 * run.max()
             up = i0 + int(np.argmax(run >= h))                            # first sample at or above half: index into g

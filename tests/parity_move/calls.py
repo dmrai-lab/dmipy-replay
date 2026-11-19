@@ -328,7 +328,7 @@ def _amplitude_only(api, scanner):
     """``scanner``'s limits with the slew left unstated: the machine's amplitude and every other field, no slew. The
     delivery path's recorded values are pinned on the fixture's ``box`` acquisition, an idealised square waveform (steps
     of thousands of T/m/s) that no clinical gradient set plays; a delivery given the machine's full limits refuses it
-    (``tests/test_time_segments.py``), so the record states the idealisation in the call. The delivered vectors do not
+    (``tests/test_read_slew.py``), so the record states the idealisation in the call. The delivered vectors do not
     depend on the slew limit, only the refusal does."""
     from dataclasses import replace
     return replace(api.ScannerLimits.of(scanner), slew_max=None)

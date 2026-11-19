@@ -7,9 +7,10 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 - **The Bloch route states its longitudinal model.** `replay_bloch` (numpy and JAX) multiplies each walker's `M_z` by
   `exp(-dt / T1)` per piece, the MT bound pool's by `exp(-dt / T1_bound)`, and adds no recovery toward equilibrium;
-  a walker starts at equilibrium. Its docstrings say so and name the reads this covers: an ideal 90-180 spin echo is
-  exact; a stimulated echo's recall and a repeated excitation train, which tip regrown longitudinal magnetisation
-  back into the signal, are outside the model.
+  a walker starts at equilibrium. Its docstrings say so and state the size of the omitted recovery on the reads it
+  was measured on: none on an ideal 90-180 spin echo; about 1e-2 on an unencoded stimulated echo and from about 2e-4
+  to 7e-3 on an encoded one, depending on how far the walkers are spread; the whole signal on a repeated excitation
+  train.
 - **A built pulsed pair states the timings it plays.** `Encoding.delta_built` and `Encoding.Delta_built` (seconds per
   measurement) of a `pgse` or `pgste` sequence are its pair as built, read off the stored samples of the effective
   gradient (`sequences.assemble.pair_timings`): the mean half-amplitude width of the first two lobes and the separation

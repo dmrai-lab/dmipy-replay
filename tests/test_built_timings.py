@@ -102,6 +102,16 @@ def test_the_pair_is_the_first_two_lobes_not_a_later_readout_lobe():
     assert abs(pair_timings(G_wrong, [[0, 0, 1]], seq.dt)[1][0] - 12.025009e-3) > 1e-3
 
 
+def test_a_lobe_abutting_one_of_the_opposite_sign_is_read_through_zero():
+    # samples at k dt: a negative lobe on 2-3 directly followed by a positive one on 4-6; g linear between samples
+    # crosses -1/2 at 1.5 and 3.25, +1/2 at 3.75 and 6.5
+    g = np.array([0, 0, -1, -1, 1, 1, 1, 0, 0], float)
+    G = np.zeros((1, g.size, 3)); G[0, :, 2] = g
+    width, sep = pair_timings(G, [[0, 0, 1]], 1.0)
+    assert width[0] == pytest.approx(0.5 * ((3.25 - 1.5) + (6.5 - 3.75)), abs=1e-15)
+    assert sep[0] == pytest.approx(0.5 * (3.75 + 6.5) - 0.5 * (1.5 + 3.25), abs=1e-15)
+
+
 #: the nominal values on the base commit, recorded as float.hex: delta and Delta are unchanged bit for bit
 NOMINAL = [("0x1.47ae147ae147bp-8", "0x1.89374bc6a7efap-7"), ("0x1.26e978d4fdf3bp-7", "0x1.db22d0e560419p-6"),
            ("0x1.de69ad42c3c9fp-8", "0x1.47ae147ae147bp-6"), ("0x1.26e978d4fdf3bp-7", "0x1.db22d0e560419p-6"),
