@@ -127,3 +127,14 @@ def test_measurement_batching_is_invisible_in_the_result():
         out = replay_bloch_jax(traj, DT, G, DT, _rf(), T2=40e-3, echo_steps=[60, 119], echo_per_walker=True,
                                phase_table_bytes=budget)
         _close(out, ref)
+
+
+def test_the_longitudinal_model_is_the_references_decay_without_recovery():
+    traj, G = _walk(), np.zeros((1, N_T, 3))
+    M_init = np.zeros((1, 3, N_W)); M_init[0, 2] = 0.3
+    kw = dict(T2=40e-3, T1=0.8, M_init=M_init, return_state=True)
+    Mj, _ = replay_bloch_jax(traj, DT, G, DT, [], **kw)
+    Mn, _ = replay_bloch(traj, DT, G, DT, [], **kw)
+    T = (N_T - 1) * DT
+    np.testing.assert_allclose(np.asarray(Mn)[0, 2], 0.3 * np.exp(-T / 0.8), rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(Mj)[0, 2], 0.3 * np.exp(-T / 0.8), rtol=1e-6)

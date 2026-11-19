@@ -2,6 +2,16 @@
 sequence along its path read at the walk's block ends (:meth:`~dmipy_replay.replay.replay.ReplayPack.positions`),
 the route of anything the scalar gate cannot express -- a non-nominal flip (B1+), a finite or shaped pulse, a
 train's coherence pathways, an MT bound pool (RPK.md 6.5, ACQUISITION.md 7.2).
+
+**The longitudinal model.** Over each piece of the walk a walker's ``M_z`` is multiplied by ``exp(-dt / T1)`` (per
+pool; the MT bound pool's ``T1_bound`` likewise): it DECAYS and does not recover toward equilibrium. The walker starts
+at equilibrium, ``M = (0, 0, 1)``. A read is exact under this model when no longitudinal magnetisation regrown during
+the sequence would reach the signal: an ideal 90-180 spin echo is (its pulses never tip ``M_z`` into the transverse
+plane; against the closed form with recovery, T1 1 s, T2 80 ms, TE 50 ms: a relative difference of 8e-15). A pulse
+that tips the longitudinal magnetisation back is outside the model: a stimulated echo's recall (hard 90-90-90 with the
+store 5 ms after the excitation, TM 10 ms, no gradient, T1 1 s: 1.1e-2 relative) and a train of repeated excitations
+(20 pulses of 60 degrees at TR 100 ms, T1 1 s: the route's signal decays to 2e-7 where the recovering one holds
+0.123). The recovering propagator of a single pulse is :func:`~dmipy_replay.acquisition.rf.bloch_simulate`.
 """
 
 from typing import NamedTuple
@@ -276,6 +286,10 @@ def replay_bloch(trajectory, h, G, dt_wf, rf_events, *,
 
     Coherence pathways / refocusing are EMERGENT: the 180 conjugates the accumulated phase, so the spin echo
     forms by itself. **Pass the PHYSICAL (same-sign-lobe) gradient** (``ScannerSequence.G``, on its own grid).
+
+    The longitudinal magnetisation decays by ``exp(-dt / T1)`` per piece and does not recover toward equilibrium (the
+    module docstring states which reads that covers: an ideal 90-180 spin echo, not a stimulated echo's recall nor
+    a repeated excitation train); a walker starts at equilibrium unless ``M_init`` says otherwise.
 
     Parameters
     ----------
