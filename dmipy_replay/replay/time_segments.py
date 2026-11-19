@@ -25,7 +25,10 @@ take the gradient's value on each; shaped or overlapping terms take the least sq
 shapes, and its residual is held to the same tolerance, :data:`_RTOL` of the peak. A sequence that plays a gradient
 outside the terms or on a term its gate stores, is off the shapes (the partition, the row, the term the residual lies
 in and the residual's relative norm are named), or leaves a net moment, is refused by name. A level beyond the envelope
-the layout's widths are derived at (``G_max``, ``b_max``, the manifest's ``source.envelope``) is refused too.
+the layout's widths are derived at (``G_max``, ``b_max``, the manifest's ``source.envelope``) is refused too, and so is a
+played gradient that steps faster than a STATED slew limit (:meth:`TimeSegmentLayout.fit`: the call's ``slew_max``, a
+delivery's scanner limits, the manifest's ``source.envelope["slew_max"]``, in that order; with none stated, no slew is
+checked).
 
 **The words.** Each component of a term vector is a two's-complement bit field of a width the manifest states, a
 walker's fields of one partition placed first-fit into 32-bit words, no field across a word; :func:`unpack_words`
@@ -661,10 +664,22 @@ class TimeSegmentLayout:
         layout, scale = _layout_of(tw)
         return layout, scale, [f["name"] for f in tw["fields"]]
 
-    def fit(self, sequence, partition=None):
+    def slew_limit(self, slew_max=None):
+        """The slew limit (T/m/s, one value or one per axis) a read is held to: ``slew_max`` when given, else the
+        manifest's ``source.envelope["slew_max"]`` when the layout states one, else None (no limit is stated and no slew
+        is checked: none is assumed)."""
+        return slew_max if slew_max is not None else self.manifest["source"]["envelope"].get("slew_max")
+
+    def fit(self, sequence, partition=None, *, slew_max=None):
         """``(partition, levels)``: the stored partition ``sequence`` fits (``partition`` names one, else the first that
         fits among those whose group plays the sequence's gate, then among the rest) and its rows' effective gradients
-        on the segments ``(n_meas, n_seg, 3)``; refused by name when none fits."""
+        on the segments ``(n_meas, n_seg, 3)``; refused by name when none fits. A sequence whose played gradient steps
+        faster than the stated slew limit (:meth:`slew_limit` of ``slew_max``: the keyword, else the manifest's) is
+        refused first, by :meth:`~dmipy_replay.acquisition.scanner_sequence.ScannerSequence.check_slew` (the
+        measurement, the axis, the step and the limit named); with no limit stated no slew is checked."""
+        limit = self.slew_limit(slew_max)
+        if limit is not None:
+            _sequence(sequence).check_slew(limit)
         if partition is None:
             key = _group_key(_sequence(sequence))
             own = [n for n in self.partitions if self._gate_key(n) == key]
@@ -907,18 +922,23 @@ class TimeSegmentLayout:
         return g
 
     def delivery(self, sequence, scanner, grid=None, *, partition=None, to_scanner=None, nonlinearity=True, background=True,
-                 concomitant=True, transmit=True):
+                 concomitant=True, transmit=True, slew_max=None):
         """What ``scanner`` (a :class:`~dmipy_replay.acquisition.scanners.ScannerLimits`) plays at every voxel with rows when
         the layout's grid sits in its bore as ``grid`` says (the layout's own grid, whose isocenter is the grid centre,
         when None; :meth:`~dmipy_replay.phantom.Grid.centred_at` moves it), for ``sequence`` on its stored partition:
         :func:`~dmipy_replay.phantom.bore.delivered_vectors` of each segment's commanded plateau at :attr:`live_voxels`,
         for :meth:`image`'s ``delivered``. The term switches are those of
-        :func:`~dmipy_replay.phantom.bore.delivered_gradient` and ``transmit``."""
+        :func:`~dmipy_replay.phantom.bore.delivered_gradient` and ``transmit``.
+
+        The sequence is held to the slew the machine can play: ``slew_max`` (T/m/s) when given, else ``scanner.slew_max``,
+        else the manifest's (:meth:`fit`); a played gradient that steps faster is refused by name. An idealised waveform
+        (a square pulse) is delivered only against limits that state no slew (``dataclasses.replace(scanner,
+        slew_max=None)``), which says so in the call."""
         from ..phantom.bore import delivered_vectors
         grid = self.grid if grid is None else grid
         if tuple(grid.shape) != tuple(self.grid.shape):
             raise ValueError(f"the grid placed in the bore is the layout's own ({tuple(self.grid.shape)}), got {tuple(grid.shape)}")
-        name, L = self.fit(sequence, partition)
+        name, L = self.fit(sequence, partition, slew_max=scanner.slew_max if slew_max is None else slew_max)
         if not self.partitions[name].is_constant:
             raise ValueError(f"partition {name!r} has shaped terms: a machine's delivered gradient (its Maxwell term is "
                              "quadratic in the waveform) is one vector per constant segment, not per shape")
@@ -1004,12 +1024,14 @@ class TimeSegmentLayout:
 
 
     def image(self, sequence, *, partition=None, backend=None, device=None, resident=True, tissue=None, scanner=None,
-              b0_direction=(0.0, 0.0, 1.0), delivered=None):
+              b0_direction=(0.0, 0.0, 1.0), delivered=None, slew_max=None):
         """``(S, floor)`` of the grid under ``sequence`` (a :class:`~dmipy_replay.acquisition.scanner_sequence.ScannerSequence`
         whose rows are sums of the shapes of a stored partition's terms; ``partition`` names one, else the first it fits): ``S``
         ``grid.shape + (n_meas,)``, the weighted ensemble magnitude per voxel (NaN where the layout has no rows),
         ``floor`` ``grid.shape`` its split-half floor ``max_m |S_a - S_b| / 2``. A row beyond the envelope the widths are
-        derived at (``G_max``, ``b_max``) is refused by name. ``backend`` names the arithmetic's backend
+        derived at (``G_max``, ``b_max``) is refused by name, and so is a played gradient that steps faster than the stated
+        slew limit (``slew_max``, T/m/s, else the manifest's ``source.envelope["slew_max"]``; with none stated no slew is
+        checked: :meth:`fit`). ``backend`` names the arithmetic's backend
         (:attr:`BACKENDS`; :attr:`DEFAULT_BACKEND` when None) and ``device`` its device. The packed words -- the partition's, the
         tiers', the background's -- reach the device as they are stored and are decoded in the kernel step that reads
         them, a chunk of :attr:`TILES` tiles at a time; ``resident`` keeps every column the image reads whole on the
@@ -1025,7 +1047,7 @@ class TimeSegmentLayout:
         (:func:`~dmipy_replay.acquisition.epg.transmit_amplitude`)."""
         from ..acquisition.epg import pathway_weight
         be = self._backend(backend)
-        name, L = self.fit(sequence, partition)
+        name, L = self.fit(sequence, partition, slew_max=slew_max)
         self._certified(name, L)
         tm = self.terms(name, tissue, scanner)
         if tm is not None:

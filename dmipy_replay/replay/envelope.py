@@ -38,8 +38,9 @@ CLASS_HEADER_BOUND = "scanner_class"
 #: * ``G_max`` is ``acquisition.G_max``, the bound the quadrature, quantisation and rounding terms were read at.
 #: * ``name`` is ``acquisition.scanner``; ``B0_list``, ``max_refocusing_pulses``, ``tissue.chi_max`` and
 #:   ``tissue.rho2_over_D_max`` are read as stated.
-#: * ``slew_max`` is not read: no term of the certificate depends on it. A waveform's slew enters only through the band
-#:   its ramps need, which the band check holds directly.
+#: * ``slew_max`` is not read by the certificate: no term of it depends on the slew. A waveform's slew enters only
+#:   through the band its ramps need, which the band check holds directly. The time-segment read path refuses a
+#:   waveform that steps faster than a stated slew (:meth:`~dmipy_replay.replay.time_segments.TimeSegmentLayout.fit`).
 CLASS_HEADER_RULE = "scanner_class/1"
 
 

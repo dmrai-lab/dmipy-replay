@@ -324,6 +324,16 @@ def _file(path):
     return {"header": json.dumps(header), "data": hashlib.sha256(blob[8 + n:]).hexdigest()}
 
 
+def _amplitude_only(api, scanner):
+    """``scanner``'s limits with the slew left unstated: the machine's amplitude and every other field, no slew. The
+    delivery path's recorded values are pinned on the fixture's ``box`` acquisition, an idealised square waveform (steps
+    of thousands of T/m/s) that no clinical gradient set plays; a delivery given the machine's full limits refuses it
+    (``tests/test_time_segments.py``), so the record states the idealisation in the call. The delivered vectors do not
+    depend on the slew limit, only the refusal does."""
+    from dataclasses import replace
+    return replace(api.ScannerLimits.of(scanner), slew_max=None)
+
+
 def g08_phantom(api):
     """Phantoms composed, partitioned, written and read, and replayed on every route; what a phantom's substrates and
     machine bring to the pose replay (a specimen pose, a closed form's expansion and RF train, the delivered
@@ -347,7 +357,7 @@ def g08_phantom(api):
     ns = SimpleNamespace(pgse=api.pgse, pgste=api.pgste, ogse=api.ogse, ScannerSequence=api.ScannerSequence,
                          Partition=api.Partition, Tissue=api.Tissue)
     ts = api.TimeSegmentLayout(str(DATA / "time_segments"))
-    d = ts.delivery(acquisitions(ns)["box"][1], api.ScannerLimits.of("siemens_magnetom_prisma_3T"))
+    d = ts.delivery(acquisitions(ns)["box"][1], _amplitude_only(api, "siemens_magnetom_prisma_3T"))
     out["delivery/partition"], out["delivery/voxels"], out["delivery/levels"] = d.partition, np.asarray(d.voxels), np.asarray(d.levels)
     out["delivery/q"], out["delivery/g0"], out["delivery/kappa"] = np.asarray(d.q), np.asarray(d.g0), np.asarray(d.kappa)
     cyl = str(DATA / "cylinder.rpk")

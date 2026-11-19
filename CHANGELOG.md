@@ -5,6 +5,13 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **The time-segment read path refuses a waveform the stated slew cannot play.** `TimeSegmentLayout.fit`, `image` and
+  `delivery` refuse a sequence whose played gradient steps faster than the slew limit they are given, by
+  `ScannerSequence.check_slew` (the measurement, the axis, the step and the limit named). The limit is the call's
+  `slew_max=` (T/m/s, one value or one per axis), else, for `delivery`, its scanner's `ScannerLimits.slew_max`, else the
+  layout manifest's `source.envelope["slew_max"]`; with none stated no slew is checked. A delivery given a scanner now
+  refuses a waveform that scanner's slew cannot play (a square pulse, for example); an idealised waveform is delivered
+  by stating limits without a slew, `dataclasses.replace(limits, slew_max=None)`.
 - **Every builder plays within the slew it is given.** At a finite `slew_rate` no step of a built sequence's played
   gradient, on any axis, exceeds the slew (`ScannerSequence.check_slew` refuses one that does, `ScannerSequence.peak_slew`
   reports the steps; every builder applies the check), for every ramp length, a ramp shorter than one step included:
