@@ -43,6 +43,7 @@ import numpy as np
 
 from .compression import c2_bands_K as _cx_bands_K
 from .decoded import PackArrays
+from .envelope import largest_field_strength
 from .planning import PLAN_TOL, ReadPlan, planned
 
 from dmipy_analytic.constants import GAMMA
@@ -274,7 +275,7 @@ def check_acquisition_envelope(meta, waveform, *, field_active=False):
     The waveform's band is held to ``band_hz`` where the band is measured, against the pack's bands
     (:meth:`ReplayPack._check_band`, :meth:`~dmipy_replay.replay.columnar.ColumnarPack.bands_for`). The field strength and
     the susceptibility are held to the envelope by :func:`field_term`, where they act: a ``B0`` is certified over the
-    range up to the largest ``B0_list`` entry (:attr:`ReplayPack.field_envelope`). No slew is checked: no term of the
+    range up to the one maximum field strength (:attr:`ReplayPack.field_envelope`). No slew is checked: no term of the
     certificate depends on a waveform's slew except through the band its ramps need.
 
     A view (:meth:`ReplayPack.at_length_scale`, :meth:`ReplayPack.at_diffusivity`) carries its moved ``G_max`` and
@@ -311,10 +312,11 @@ def field_envelope_of(meta):
     if unknown:
         raise ValueError(f"this pack's replay_envelope.tissue declares {sorted(unknown)}; it takes only "
                          "rho2_over_D_max and chi_max")
-    chi, B0s = tissue.get("chi_max"), (env.get("acquisition") or {}).get("B0_list")
-    if chi is None or not B0s:
+    chi = tissue.get("chi_max")
+    B0_max = largest_field_strength((env.get("acquisition") or {}).get("B0_list"))
+    if chi is None or B0_max is None:
         return None
-    return dict(B0_max=float(max(B0s)), chi_max=float(chi), B0_chi_max=float(max(B0s)) * float(chi))
+    return dict(B0_max=float(B0_max), chi_max=float(chi), B0_chi_max=float(B0_max) * float(chi))
 
 
 def _numpy_bloch():
@@ -542,9 +544,9 @@ class ReplayPack:
         """The field tier's envelope, ``{"B0_max", "chi_max", "B0_chi_max"}``: the largest field strength
         (``replay_envelope.acquisition.B0_list``), the susceptibility scale (``replay_envelope.tissue.chi_max``) and
         their product, the one certified field scale every field term was read at; ``None`` when the pack stores no
-        field or states neither. ``B0_list`` lists the strengths the certificate was measured at, and what it covers is
-        the range up to the largest: the field term is linear in ``B0 chi`` and the codec, the field read and the mode
-        count are all certified at that one largest product, so any ``B0`` in ``[0, max(B0_list)]`` is served. A replay
+        field or states neither. A header's ``B0_list`` is read at its largest entry, and what the certificate covers is
+        the range up to it: the field term is linear in ``B0 chi`` and the codec, the field read and the mode
+        count are all certified at that one largest product, so any ``B0`` in ``[0, B0_max]`` is served. A replay
         beyond it is refused (:func:`field_term`)."""
         return field_envelope_of(self.meta)
 

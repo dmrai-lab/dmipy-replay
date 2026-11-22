@@ -40,7 +40,7 @@ licences.
 A pack replays only the tiers it carries and **refuses** a knob outside them by name. It never returns a
 plausible number in place of one it cannot compute. Each pack states the envelope it is certified over,
 `pack.envelope` (a `dr.Envelope`, in physical terms: the temporal band `band_hz`, the per-axis amplitude `G_max`, the
-field strengths, susceptibility scale, refocusing depth and surface relaxivity; `dr.envelope_of("prisma")` is a
+largest field strength, susceptibility scale, refocusing depth and surface relaxivity; `dr.envelope_of("prisma")` is a
 scanner class's). A waveform that needs more band than `band_hz` (`pack.waveform_band(seq)`, at the pack's stated
 numerical cap less its other certified terms, `pack.truncation_budget`) or plays more than `G_max` on an axis is
 refused by name, and so is a field strength or susceptibility beyond the certified field scale (`pack.field_envelope`)

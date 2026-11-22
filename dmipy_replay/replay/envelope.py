@@ -9,7 +9,7 @@ surface relaxivity. Those are the fields of an :class:`Envelope`; nothing else e
 that produces one (:func:`envelope_of`), recorded as its :attr:`~Envelope.name`.
 
 A pack's header states its envelope in ``replay_envelope`` (RPK.md 11): ``acquisition.bound = "envelope"`` with
-``name``, ``band_hz``, ``G_max``, ``B0_list`` and, for a field channel, ``max_refocusing_pulses``; ``tissue`` with
+``name``, ``band_hz``, ``G_max``, ``B0_list`` (one entry, the maximum field strength) and, for a field channel, ``max_refocusing_pulses``; ``tissue`` with
 ``rho2_over_D_max`` (the contact bound over the walk's diffusivity) and ``chi_max``. :meth:`Envelope.from_header` reads
 it, and also reads a header that states a scanner class (``bound = "scanner_class"`` with ``scanner``, ``G_max``,
 ``slew_max``) by the rule :data:`CLASS_HEADER_RULE`.
@@ -36,7 +36,7 @@ CLASS_HEADER_BOUND = "scanner_class"
 #:   truncation term of such a pack is bounded per waveform at its stored bands, so the stored band is the band the
 #:   certificate covers; the catalogue is not read, so the envelope does not move when the catalogue does.
 #: * ``G_max`` is ``acquisition.G_max``, the bound the quadrature, quantisation and rounding terms were read at.
-#: * ``name`` is ``acquisition.scanner``; ``B0_list``, ``max_refocusing_pulses``, ``tissue.chi_max`` and
+#: * ``name`` is ``acquisition.scanner``; ``B0_list`` (read at its largest entry), ``max_refocusing_pulses``, ``tissue.chi_max`` and
 #:   ``tissue.rho2_over_D_max`` are read as stated.
 #: * ``slew_max`` is not read by the certificate: no term of it depends on the slew. A waveform's slew enters only
 #:   through the band its ramps need, which the band check holds directly. The time-segment read path refuses a
@@ -51,6 +51,17 @@ def _finite(x, what, *, positive=False):
     return v
 
 
+def largest_field_strength(listed):
+    """The one maximum field strength (T) a header's ``acquisition.B0_list`` states: its largest entry, ``None`` for an
+    empty list or an absent key (``None``). The one place a list of field strengths is reduced."""
+    if listed is None:
+        return None
+    if isinstance(listed, (str, bytes)) or np.ndim(listed) != 1:
+        raise ValueError(f"B0_list is a list of field strengths in tesla; got {listed!r}")
+    entries = [_finite(b, "B0_list entry (T)") for b in listed]
+    return max(entries) if entries else None
+
+
 @dataclass(frozen=True)
 class Envelope:
     """The acquisitions and tissues a replay pack is certified for, in physical terms. Every field is stated; ``None``
@@ -62,8 +73,8 @@ class Envelope:
       (:meth:`~dmipy_replay.replay.replay.ReplayPack.waveform_band`, at the pack's truncation budget) is at most this.
       A pack stores ``K = ceil(2 band_hz T)`` bands per window of ``T`` seconds (:meth:`mode_count`) or more.
     * ``G_max`` (T/m): the largest gradient per axis, played by the coils.
-    * ``B0_list`` (T): the field strengths the field tier is read at; the certificate covers ``[0, max(B0_list)]``
-      (the field term is linear in ``B0 chi``). Empty when no field term is certified.
+    * ``B0_max`` (T): the one maximum field strength the field tier is certified at; the certificate covers
+      ``[0, B0_max]`` (the field term is linear in ``B0 chi``). ``None`` when no field term is certified.
     * ``chi_max``: the largest ``|chi_iso| + |chi_aniso|`` the field tier is certified at.
     * ``rho2_max`` (m/s): the largest surface relaxivity the contact tier is certified at. A header states it over the
       walk's diffusivity, ``rho2_over_D_max``.
@@ -73,7 +84,7 @@ class Envelope:
     name: str
     band_hz: float
     G_max: float
-    B0_list: tuple
+    B0_max: Optional[float]
     chi_max: Optional[float]
     rho2_max: Optional[float]
     max_refocusing_pulses: Optional[int]
@@ -83,10 +94,11 @@ class Envelope:
             raise ValueError(f"an envelope's name is a non-empty string (its provenance); got {self.name!r}")
         object.__setattr__(self, "band_hz", _finite(self.band_hz, "band_hz (Hz)", positive=True))
         object.__setattr__(self, "G_max", _finite(self.G_max, "G_max (T/m per axis)"))
-        if self.B0_list is None or isinstance(self.B0_list, (str, bytes)) or np.ndim(self.B0_list) != 1:
-            raise ValueError(f"an envelope's B0_list is a sequence of field strengths in tesla (empty for none); got "
-                             f"{self.B0_list!r}")
-        object.__setattr__(self, "B0_list", tuple(_finite(b, "B0_list entry (T)") for b in self.B0_list))
+        if self.B0_max is not None:
+            b = self.B0_max
+            if isinstance(b, (bool, str, bytes)) or np.ndim(b) != 0:
+                raise ValueError(f"an envelope states one maximum field strength in tesla; pass the largest; got {b!r}")
+            object.__setattr__(self, "B0_max", _finite(b, "B0_max (T), one maximum field strength,"))
         if self.chi_max is not None:
             object.__setattr__(self, "chi_max", _finite(self.chi_max, "chi_max", positive=True))
         if self.rho2_max is not None:
@@ -96,11 +108,6 @@ class Envelope:
             if isinstance(n, bool) or int(n) != n or int(n) < 0:
                 raise ValueError(f"an envelope's max_refocusing_pulses is a non-negative integer; got {n!r}")
             object.__setattr__(self, "max_refocusing_pulses", int(n))
-
-    @property
-    def B0_max(self):
-        """The largest field strength (T) the field tier is certified up to, or None when ``B0_list`` is empty."""
-        return max(self.B0_list) if self.B0_list else None
 
     def mode_count(self, T):
         """The bands ``K = ceil(2 band_hz T)`` a window of ``T`` seconds needs to hold this envelope's band
@@ -113,16 +120,22 @@ class Envelope:
         return type(self)(**{**self.to_dict(), **changes})
 
     def to_dict(self):
-        """Every field, JSON-ready (``B0_list`` a list)."""
-        d = {f.name: getattr(self, f.name) for f in fields(self)}
-        d["B0_list"] = list(d["B0_list"])
-        return d
+        """Every field, JSON-ready."""
+        return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
     def from_dict(cls, d):
-        """The envelope :meth:`to_dict` wrote. Every field must be present: a missing one is refused by name."""
+        """The envelope :meth:`to_dict` wrote. Every field must be present: a missing one is refused by name. A stored
+        dictionary may carry ``B0_list`` in place of ``B0_max``; it is read at its largest entry, as a header's is, and
+        one carrying both is refused."""
         if isinstance(d, cls):
             return d
+        d = dict(d)
+        if "B0_list" in d:
+            if "B0_max" in d:
+                raise ValueError("an envelope states one maximum field strength: the dictionary carries both B0_max "
+                                 "and B0_list")
+            d["B0_max"] = largest_field_strength(d.pop("B0_list"))
         names = [f.name for f in fields(cls)]
         missing = [n for n in names if n not in d]
         extra = sorted(set(d) - set(names))
@@ -133,16 +146,16 @@ class Envelope:
 
     def header_acquisition(self):
         """The envelope's part of ``replay_envelope.acquisition``: ``bound`` :data:`ENVELOPE_BOUND`, ``name``, ``band_hz``,
-        ``G_max`` and ``B0_list``. A producer adds what the pack realised beside it (``max_refocusing_pulses`` of the
+        ``G_max`` and ``B0_list`` (one entry, ``[B0_max]``; empty when ``B0_max`` is None). A producer adds what the pack realised beside it (``max_refocusing_pulses`` of the
         field channel it stored, ``b_max``)."""
         return dict(bound=ENVELOPE_BOUND, name=self.name, band_hz=float(self.band_hz), G_max=float(self.G_max),
-                    B0_list=[float(b) for b in self.B0_list])
+                    B0_list=([] if self.B0_max is None else [float(self.B0_max)]))
 
     @classmethod
     def from_header(cls, meta):
         """The envelope a pack or layout header ``meta`` states (``replay_envelope``). A header with ``bound``
         :data:`ENVELOPE_BOUND` is read as stated; one with ``bound`` :data:`CLASS_HEADER_BOUND` by
-        :data:`CLASS_HEADER_RULE`. Any other header -- no bound, or a battery of b values, which is no guarantee for a
+        :data:`CLASS_HEADER_RULE`. A header's ``B0_list`` is read at its largest entry. Any other header -- no bound, or a battery of b values, which is no guarantee for a
         waveform -- is refused by name, as is one missing a field."""
         env = meta.get("replay_envelope") or {}
         acq = env.get("acquisition") or {}
@@ -178,21 +191,20 @@ class Envelope:
                 raise ValueError(f"pack {ident!r} states a contact bound rho2_over_D_max and no diffusivity "
                                  "(walk_params.diffusivity) to read it in m/s by")
             rho2_max = float(rho) * float(D)
-        return cls(name=name, band_hz=band, G_max=acq["G_max"], B0_list=tuple(acq.get("B0_list") or ()),
+        return cls(name=name, band_hz=band, G_max=acq["G_max"], B0_max=largest_field_strength(acq.get("B0_list")),
                    chi_max=tissue.get("chi_max"), rho2_max=rho2_max,
                    max_refocusing_pulses=acq.get("max_refocusing_pulses"))
 
 
-def envelope_of(scanner, *, B0_list=(), chi_max=None, rho2_max=None, max_refocusing_pulses=None):
+def envelope_of(scanner, *, B0_max=None, chi_max=None, rho2_max=None, max_refocusing_pulses=None):
     """The :class:`Envelope` of a scanner class from the catalogue (``acquisition/scanner_constants.json``):
     ``band_hz`` the class's certified band (``band.certified_band_hz``: the band every waveform the class can deliver
     needs, the closed-form certificate at the class's amplitude and slew) times
     :data:`~dmipy_replay.replay.storage.STORAGE_BAND_MARGIN`, ``G_max`` its gradient amplitude, ``name`` the name it was
     asked by (any of the catalogue's names for it). This is the one place a scanner's band rule is applied.
 
-    The field and tissue bounds are not a scanner's: ``B0_list``, ``chi_max``, ``rho2_max`` and
-    ``max_refocusing_pulses`` are stated here, and their defaults state that no such term is certified (an empty
-    ``B0_list``, ``None``). A producer refuses a walk whose channels need a bound the envelope does not state.
+    The field and tissue bounds are not a scanner's: ``B0_max`` (the one maximum field strength, T), ``chi_max``, ``rho2_max`` and
+    ``max_refocusing_pulses`` are stated here, and their defaults state that no such term is certified (``None``). A producer refuses a walk whose channels need a bound the envelope does not state.
 
     A class the catalogue holds no certified band for is refused by name: the band is a measured property of the class,
     never a guess from its amplitude or slew; state an :class:`Envelope` with its band instead."""
@@ -204,5 +216,5 @@ def envelope_of(scanner, *, B0_list=(), chi_max=None, rho2_max=None, max_refocus
                          "measured and cited before a pack is stored for it (band.certified_band_hz); state an "
                          "Envelope(band_hz=...) for a band of your own")
     return Envelope(name=(scanner if isinstance(scanner, str) else str(lim.name)), band_hz=float(STORAGE_BAND_MARGIN) * float(lim.certified_band_hz),
-                    G_max=float(lim.G_max), B0_list=tuple(B0_list), chi_max=chi_max, rho2_max=rho2_max,
+                    G_max=float(lim.G_max), B0_max=B0_max, chi_max=chi_max, rho2_max=rho2_max,
                     max_refocusing_pulses=max_refocusing_pulses)

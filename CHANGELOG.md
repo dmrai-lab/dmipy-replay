@@ -5,6 +5,12 @@ the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- **An envelope states one maximum field strength.** `Envelope` holds `B0_max` (a number in tesla, or `None`) in the
+  place of `B0_list`, and `envelope_of(scanner, *, B0_max=None, ...)` takes it in the place of `B0_list=()`; the
+  property `B0_max` is now the field. A sequence, a string or a bool is refused by name. `to_dict()` gives `B0_max`.
+  A header keeps its key `replay_envelope.acquisition.B0_list`, written with one entry (`[B0_max]`, empty for
+  `None`); a header's list, and a stored dictionary's `B0_list` read by `Envelope.from_dict`, are read at their
+  largest entry by one function that `Envelope.from_header` and `field_envelope_of` share. No stored file changes.
 - **The Bloch route states its longitudinal model.** `replay_bloch` (numpy and JAX) multiplies each walker's `M_z` by
   `exp(-dt / T1)` per piece, the MT bound pool's by `exp(-dt / T1_bound)`, and adds no recovery toward equilibrium;
   a walker starts at equilibrium. Its docstrings say so and state the size of the omitted recovery on the reads it

@@ -75,7 +75,7 @@ def plane(n, out):
     import dmipy_sim as d
     from dmipy_replay import Envelope
     from dmipy_sim.replay.bank import build_replay_pack
-    env = Envelope(name="cross-tier fixture", band_hz=BAND_HZ, G_max=1.0, B0_list=(PLANE_B0,), chi_max=PLANE_CHI,
+    env = Envelope(name="cross-tier fixture", band_hz=BAND_HZ, G_max=1.0, B0_max=PLANE_B0, chi_max=PLANE_CHI,
                    rho2_max=None, max_refocusing_pulses=1)
     grid = _grid(PLANE_L, lambda x: PLANE_G0 * (x - PLANE_L / 2) / (PLANE_B0 * PLANE_CHI))
     w = _walk(d.Box1D(PLANE_L), n, PLANE_T, PLANE_SEED, grid, env)
@@ -91,7 +91,7 @@ def slab(n, out):
     import dmipy_sim as d
     from dmipy_replay import Envelope
     from dmipy_sim.replay.bank import build_replay_pack
-    env = Envelope(name="cross-tier fixture", band_hz=BAND_HZ, G_max=1.0, B0_list=(3.0, 7.0), chi_max=abs(SLAB_CHI),
+    env = Envelope(name="cross-tier fixture", band_hz=BAND_HZ, G_max=1.0, B0_max=7.0, chi_max=abs(SLAB_CHI),
                    rho2_max=SLAB_RHO2_MAX, max_refocusing_pulses=1)
     grid = _grid(SLAB_L, lambda x: ((x > SLAB_L / 2).astype(float) - 0.5) / 3.0)
     w = _walk(d.PermeableSlab1D(SLAB_L, SLAB_KAPPA), n, SLAB_T, SLAB_SEED, grid, env)

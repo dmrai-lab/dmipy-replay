@@ -43,16 +43,16 @@ def pgse(g=0.1, slew_rate=200.0):
 
 # ------------------------------------------------------------------------------------------------ the object
 def test_an_envelope_states_every_field_and_refuses_a_bad_one():
-    e = dr.Envelope(name="x", band_hz=500.0, G_max=0.3, B0_list=[3.0, 7.0], chi_max=None, rho2_max=1e-4,
+    e = dr.Envelope(name="x", band_hz=500.0, G_max=0.3, B0_max=7.0, chi_max=None, rho2_max=1e-4,
                     max_refocusing_pulses=None)
-    assert e.B0_list == (3.0, 7.0) and e.B0_max == 7.0 and e.mode_count(0.1) == 100
+    assert e.B0_max == 7.0 and e.mode_count(0.1) == 100
     assert dr.Envelope.from_dict(e.to_dict()) == e
     with pytest.raises(TypeError):
         dr.Envelope(name="x", band_hz=500.0, G_max=0.3)                   # no field is defaulted
     with pytest.raises(ValueError, match="missing"):
         dr.Envelope.from_dict({k: v for k, v in e.to_dict().items() if k != "chi_max"})
     for bad in (dict(band_hz=0.0), dict(band_hz=np.inf), dict(G_max=-1.0), dict(chi_max=0.0), dict(name=""),
-                dict(max_refocusing_pulses=1.5), dict(B0_list=None)):
+                dict(max_refocusing_pulses=1.5), dict(B0_max=[3.0, 7.0])):
         with pytest.raises(ValueError):
             e.replace(**bad)
 
@@ -65,8 +65,8 @@ def test_a_scanner_preset_is_the_catalogues_band_times_the_storage_margin():
         assert e.name == scanner
         assert e.band_hz == pytest.approx(STORAGE_BAND_MARGIN * lim.certified_band_hz)
         assert e.G_max == lim.G_max
-        assert (e.B0_list, e.chi_max, e.rho2_max, e.max_refocusing_pulses) == ((), None, None, None)
-    assert dr.envelope_of("prisma", B0_list=[3.0], chi_max=1e-7).B0_list == (3.0,)
+        assert (e.B0_max, e.chi_max, e.rho2_max, e.max_refocusing_pulses) == (None, None, None, None)
+    assert dr.envelope_of("prisma", B0_max=3.0, chi_max=1e-7).B0_max == 3.0
     with pytest.raises(ValueError, match="no certified band"):
         dr.envelope_of("low_field")
 
@@ -131,9 +131,9 @@ def test_the_refocusing_depth_of_a_windowed_pack_is_a_windows():
         check_acquisition_envelope(p.meta, across, field_active=True)    # one window: the whole train
 
 
-def test_a_field_strength_is_certified_over_the_range_up_to_the_largest_b0_list_entry():
+def test_a_field_strength_is_certified_over_the_range_up_to_the_maximum_field_strength():
     p = pack_of("field")
-    assert p.envelope.B0_list == (3.0, 7.0)
+    assert p.envelope.B0_max == 7.0
     chi = dr.Tissue(chi_iso=-1e-7)
     p.replay(dr.gre(0.006), tissue=chi, scanner=5.0)                      # between the listed points
     p.replay(dr.gre(0.006), tissue=chi, scanner=1.5)
