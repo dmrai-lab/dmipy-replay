@@ -229,7 +229,7 @@ def field_term(declared, tissue, scanner, envelope=None):
         scale, cert = B0 * (abs(term.chi_iso) + abs(term.chi_aniso)), float(envelope["B0_chi_max"])
         if scale > cert * (1.0 + 1e-9):
             raise ValueError(f"B0 (|chi_iso| + |chi_aniso|) = {scale:.4g} T is beyond the certified field scale "
-                             f"{cert:.4g} T (the maximum field strength times replay_envelope.tissue.chi_max): replay "
+                             f"{cert:.4g} T (the largest B0_list entry times replay_envelope.tissue.chi_max): replay "
                              "a smaller susceptibility or field")
     return term
 

@@ -34,7 +34,10 @@ def test_a1_an_envelope_holds_one_maximum_and_no_list():
 
 
 def test_a2_a_constructor_refuses_anything_but_one_finite_non_negative_number():
-    for bad in ([3.0, 7.0], (7.0,), "7", True, -1.0, np.inf):
+    for bad in ([3.0, 7.0], (7.0,), True):
+        with pytest.raises(ValueError, match="one maximum field strength"):
+            _env(B0_max=bad)
+    for bad in ("7", -1.0, np.inf):
         with pytest.raises(ValueError):
             _env(B0_max=bad)
     with pytest.raises(TypeError):
